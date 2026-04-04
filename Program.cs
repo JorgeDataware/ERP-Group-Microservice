@@ -6,6 +6,10 @@ using Scalar.AspNetCore;
 using System.Data;
 using System.Text;
 using GroupsMicroservice.Data;
+using GroupsMicroservice.Repositories;
+using GroupsMicroservice.Repositories.IRepositories;
+using GroupsMicroservice.Services;
+using GroupsMicroservice.Services.IServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +21,13 @@ builder.Services.AddScoped<IDbConnection>(_ =>
     new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+
+// Repositorios
+builder.Services.AddScoped<IGroupRepositorie, GroupRepositori>();
+
+// Servicios
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuthContextService, AuthContextService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
