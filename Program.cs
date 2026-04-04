@@ -1,72 +1,62 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using Scalar.AspNetCore;
 using System.Data;
 using System.Text;
+using GroupsMicroservice.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//builder.Services.AddDbContext<AppDbContext>(options =>
-//    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-//           .UseSnakeCaseNamingConvention());
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .UseSnakeCaseNamingConvention());
 
-//builder.Services.AddAutoMapper(_ => { }, typeof(UserMappers));
+builder.Services.AddScoped<IDbConnection>(_ =>
+    new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-//builder.Services.AddScoped<IJWTService, JWTService>();
-//builder.Services.AddScoped<IPasswordHashService, PasswordHashService>();
+Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
 
-//builder.Services.AddScoped<IDbConnection>(_ =>
-//    new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"]!))
+        };
 
-//Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Headers["Authorization"]
+                    .FirstOrDefault()?.Split(" ").Last();
 
-//builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-//    .AddJwtBearer(options =>
-//    {
-//        options.TokenValidationParameters = new TokenValidationParameters
-//        {
-//            ValidateIssuer = true,
-//            ValidateAudience = true,
-//            ValidateLifetime = true,
-//            ValidateIssuerSigningKey = true,
-//            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-//            ValidAudience = builder.Configuration["Jwt:Audience"],
-//            IssuerSigningKey = new SymmetricSecurityKey(
-//                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"]!))
-//        };
+                if (string.IsNullOrEmpty(token))
+                    token = context.Request.Cookies["jwt"];
 
-//        options.Events = new JwtBearerEvents
-//        {
-//            OnMessageReceived = context =>
-//            {
-//                var token = context.Request.Headers["Authorization"]
-//                    .FirstOrDefault()?.Split(" ").Last();
+                if (!string.IsNullOrEmpty(token))
+                    context.Token = token;
 
-//                if (string.IsNullOrEmpty(token))
-//                    token = context.Request.Cookies["jwt"];
+                return Task.CompletedTask;
+            }
+        };
+    });
 
-//                if (!string.IsNullOrEmpty(token))
-//                    context.Token = token;
-
-//                return Task.CompletedTask;
-//            }
-//        };
-//    });
+builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
-//builder.Services.AddScoped<IUserRepositorie, UserRepositorie>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-
-//// Aplicar migraciones
-//await using (var scope = app.Services.CreateAsyncScope())
-//{
-//    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-//    await dbContext.Database.MigrateAsync();
-//}
 
 if (app.Environment.IsDevelopment())
 {
