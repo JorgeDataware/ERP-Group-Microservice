@@ -5,9 +5,9 @@ namespace GroupsMicroservice.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Group> Groups => Set<Group>();
-    public DbSet<GroupMembers> GroupMembers => Set<GroupMembers>();
+    public DbSet<User> user => Set<User>();
+    public DbSet<Group> group => Set<Group>();
+    public DbSet<GroupMembers> group_members => Set<GroupMembers>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

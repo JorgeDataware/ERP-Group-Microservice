@@ -1,5 +1,7 @@
-﻿using GroupsMicroservice.Repositories.IRepositories;
+﻿using GroupsMicroservice.Models.Request;
+using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Services.IServices;
+using GroupsMicroservice.Utilities.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -33,11 +35,29 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         });
     }
 
+    [HttpPost("AddGroup")]
+    [Authorize]
+    public async Task<IActionResult> AddGroup([FromBody] AddGroupRequest request)
+    {
+        var canCreateGroup = _authContextService.HasPermission(GroupPermissions.CanCreate);
+
+        if (!canCreateGroup)
+            return ForbiddenResponse();
+
+
+        if (_authContextService.GetUserId() is not Guid userId)
+            return UnauthorizedResponse("User authentication is required to add a group.");
+
+        var result = await _groupRepositorie.AddGroupAsync(userId, request);
+
+        return NoContent();
+    }
+
     [HttpGet("GetGroups")]
     [Authorize]
     public async Task<IActionResult> GetGroups()
     {
-        var canSeeGroups = _authContextService.HasPermission("canRead_Groups");
+        var canSeeGroups = _authContextService.HasPermission(GroupPermissions.CanRead);
 
         if (!canSeeGroups)
             return ForbiddenResponse();
@@ -46,4 +66,6 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
 
         return Ok(groups.Value);
     }
+
+
 }

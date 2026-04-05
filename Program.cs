@@ -10,6 +10,7 @@ using GroupsMicroservice.Repositories;
 using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Services;
 using GroupsMicroservice.Services.IServices;
+using GroupsMicroservice.Mappers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,9 @@ builder.Services.AddScoped<IDbConnection>(_ =>
     new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+
+// Mappers
+builder.Services.AddAutoMapper(_ => { }, typeof(GroupMappers));
 
 // Repositorios
 builder.Services.AddScoped<IGroupRepositorie, GroupRepositori>();
