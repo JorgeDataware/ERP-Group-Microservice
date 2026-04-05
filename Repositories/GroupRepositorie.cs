@@ -153,4 +153,24 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
         return Result<GetCompleteGroupDto>.Success(group);
     }
+
+    public async Task<Result<IEnumerable<GroupMemberDto>>> GetMembersAsync(Guid groupId)
+    {
+        const string membersSql = @"
+            SELECT
+                u.id,
+                u.user_name,
+                CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS complete_name
+            FROM
+                group_members gm
+            JOIN ""user"" u ON gm.user_id = u.id
+            JOIN ""group"" g ON gm.group_id = g.id
+            WHERE g.id = @GroupId;";
+
+        var parameters = new { GroupId = groupId };
+
+        var members = await _dbConnection.QueryAsync<GroupMemberDto>(membersSql, parameters);
+
+        return Result<IEnumerable<GroupMemberDto>>.Success(members);
+    }
 }

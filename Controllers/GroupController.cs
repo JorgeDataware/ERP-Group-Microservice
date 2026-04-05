@@ -178,4 +178,16 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         }
         return Ok(result.Value);
     }
+
+    [HttpGet("GetGroupMembers/{groupId}")]
+    [Authorize]
+    public async Task<IActionResult> GetGroupMembers([FromRoute] Guid groupId)
+    {
+        var canSeeGroups = _authContextService.HasPermission(GroupPermissions.CanRead);
+        if (!canSeeGroups)
+            return ForbiddenResponse();
+        
+        var members = await _groupRepositorie.GetMembersAsync(groupId);
+        return Ok(members.Value);
+    }
 }
