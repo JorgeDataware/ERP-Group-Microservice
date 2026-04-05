@@ -13,4 +13,5 @@ public interface IGroupRepositorie
     Task<Result<GetCompleteGroupDto>> GetGroupByIdAsync(Guid groupId);
     Task<Result<IEnumerable<GroupMemberDto>>> GetMembersAsync(Guid groupId);
     Task<Result<Guid>> RemoveMemberAsync(Guid groupId, Guid memberId, Guid requesterId);
+    Task<Result<Guid>> DeactivateGroupAsync(Guid groupId, Guid requesterId);
 }

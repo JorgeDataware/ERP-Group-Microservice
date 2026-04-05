@@ -11,4 +11,5 @@ public class GroupErrors
     public static Error OnlyOwnerCanEditGroup => new Error("OnlyOwnerCanEditGroup", "Only the group owner can edit the group.");
     public static Error OnlyOwnerCanRemoveMembers => new Error("OnlyOwnerCanRemoveMembers", "Only the group owner can remove members from the group.");
     public static Error MemberNotFound => new Error("MemberNotFound", "The specified member was not found in the group.");
+    public static Error OnlyOwnerCanDeactivateGroup => new Error("OnlyOwnerCanDeactivateGroup", "Only the group owner can deactivate the group.");
 }

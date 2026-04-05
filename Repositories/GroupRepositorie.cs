@@ -6,6 +6,7 @@ using GroupsMicroservice.Models.Dto;
 using GroupsMicroservice.Models.Request;
 using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Utilities;
+using GroupsMicroservice.Utilities.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Reflection.Metadata.Ecma335;
@@ -194,6 +195,24 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
         if (affectedRows == 0)
             return Result<Guid>.Failure(GroupErrors.MemberNotFound);
+
+        return Result<Guid>.Success(groupId);
+    }
+
+    public async Task<Result<Guid>> DeactivateGroupAsync(Guid groupId, Guid requesterId)
+    {
+        var groupToUpdate = await _context.group
+            .FirstOrDefaultAsync(g => g.Id == groupId);
+
+        if (groupToUpdate == null)
+            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+
+        if (groupToUpdate.CreatedByUserId != requesterId && SystemUsers.SuperAdminId != requesterId)
+            return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanDeactivateGroup);
+
+        groupToUpdate.Status = Status.Inactive;
+
+        await _context.SaveChangesAsync();
 
         return Result<Guid>.Success(groupId);
     }

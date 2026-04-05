@@ -228,4 +228,38 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         }
         return NoContent();
     }
+
+    [HttpPatch("{groupId}/deactivate")]
+    [Authorize]
+    public async Task<IActionResult> DeactivateGroup([FromRoute] Guid groupId)
+    {
+        var canDeactivateGroup = _authContextService.HasPermission(GroupPermissions.CanDelete);
+        if (!canDeactivateGroup)
+            return ForbiddenResponse();
+
+        if (_authContextService.GetUserId() is not Guid userId)
+            return UnauthorizedResponse();
+
+        var result = await _groupRepositorie.DeactivateGroupAsync(groupId, userId);
+        if (!result.IsSuccess)
+        {
+            return result.error.Code switch
+            {
+                "GroupNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "OnlyOwnerCanDeactivateGroup" => ForbiddenResponse("Only the group owner can deactivate the group."),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while deactivating the group."
+                })
+            };
+        }
+        return NoContent();
+    }
 }
