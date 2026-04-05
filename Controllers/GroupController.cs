@@ -1,11 +1,8 @@
-﻿using AutoMapper.Execution;
-using GroupsMicroservice.Models.Request;
-using GroupsMicroservice.Repositories;
+﻿using GroupsMicroservice.Models.Request;
 using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Services.IServices;
 using GroupsMicroservice.Utilities.Constants;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GroupsMicroservice.Controllers;
@@ -53,12 +50,29 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         var result = await _groupRepositorie.AddGroupAsync(userId, request);
 
         if (!result.IsSuccess)
-            return Conflict(new
+        {
+            return result.error.Code switch
             {
-                statusCode = 409,
-                error = result.error.Code,
-                message = result.error.Message
-            });
+                "UserNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "GroupAlreadyExists" => Conflict(new
+                {
+                    statusCode = 409,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while adding the group."
+                })
+            };
+        }
 
         return NoContent();
     }
@@ -78,9 +92,9 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFound" => NotFound(new
+                "GroupNotFoundOrInactive" => Conflict (new
                 {
-                    statusCode = 404,
+                    statusCode = 409,
                     error = result.error.Code,
                     message = result.error.Message
                 }),
@@ -143,6 +157,12 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
                 "GroupNotFound" => NotFound(new
                 {
                     statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "UnactiveGroup" => Conflict(new
+                {
+                    statusCode = 409,
                     error = result.error.Code,
                     message = result.error.Message
                 }),
@@ -233,9 +253,9 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFound" => NotFound(new
+                "GroupNotFoundOrInactive" => Conflict(new
                 {
-                    statusCode = 404,
+                    statusCode = 409,
                     error = result.error.Code,
                     message = result.error.Message
                 }),
@@ -280,6 +300,12 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
                     message = result.error.Message
                 }),
                 "OnlyOwnerCanDeactivateGroup" => ForbiddenResponse("Only the group owner can deactivate the group."),
+                "UnactiveGroup" => Conflict(new
+                {
+                    statusCode = 409,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
                 _ => StatusCode(StatusCodes.Status500InternalServerError, new
                 {
                     statusCode = 500,

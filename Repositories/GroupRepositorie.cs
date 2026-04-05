@@ -26,12 +26,11 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
                 g.id,
                 g.name,
                 g.description,
-                CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS owner
+                CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS owner,
+                g.status
             FROM
                 ""group"" g
             JOIN ""user"" u ON g.created_by_user_id = u.id";
-
-        var connection = _dbConnection;
 
         var groups = await _dbConnection.QueryAsync<GroupDto>(sql);
 
@@ -113,10 +112,13 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
             .FirstOrDefaultAsync(g => g.Id == groupId);
 
         if (groupToUpdate == null)
-            return Result<Guid>.Failure(GroupErrors.GroupNotFoundOrInactive);
+            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
 
         if (groupToUpdate.CreatedByUserId != requesterId)
             return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanEditGroup);
+
+        if (groupToUpdate.Status == Status.Inactive)
+            return Result<Guid>.Failure(GroupErrors.UnactiveGroup);
 
         _mapper.Map(request, groupToUpdate);
 
@@ -156,7 +158,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
         var group = await _dbConnection.QueryFirstOrDefaultAsync<GetCompleteGroupDto>(groupSql, parameters);
 
         if (group == null)
-            return Result<GetCompleteGroupDto>.Failure(GroupErrors.GroupNotFoundOrInactive);
+            return Result<GetCompleteGroupDto>.Failure(GroupErrors.GroupNotFound);
 
         var members = await _dbConnection.QueryAsync<GroupMemberDto>(membersSql, parameters);
 
@@ -172,7 +174,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
             .AnyAsync(g => g.Id == groupId);
 
         if (!groupExists)
-            return Result<IEnumerable<GroupMemberDto>>.Failure(GroupErrors.GroupNotFoundOrInactive);
+            return Result<IEnumerable<GroupMemberDto>>.Failure(GroupErrors.GroupNotFound);
 
         const string membersSql = @"
             SELECT
@@ -222,7 +224,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
             .FirstOrDefaultAsync(g => g.Id == groupId);
 
         if (groupToUpdate == null)
-            return Result<Guid>.Failure(GroupErrors.GroupNotFoundOrInactive);
+            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
 
         if (groupToUpdate.CreatedByUserId != requesterId && SystemUsers.SuperAdminId != requesterId)
             return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanDeactivateGroup);
