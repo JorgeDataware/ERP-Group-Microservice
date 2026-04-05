@@ -6,6 +6,7 @@ using GroupsMicroservice.Models.Dto;
 using GroupsMicroservice.Models.Request;
 using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Utilities;
+using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Reflection.Metadata.Ecma335;
 using UsersMicroservice.Utilities.Abstractions;
@@ -52,21 +53,44 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
         return Result<Guid>.Success(newGroup.Id);
     }
 
-    public async Task<Result<Guid>> AddMembersAsync(Guid groupId, IEnumerable<Guid> memberIds)
+    public async Task<Result<Guid>> AddMemberAsync(Guid groupId, Guid memberId, Guid requesterId)
     {
-        var group = await _context.group.FindAsync(groupId);
+        var group = await _context.group
+            .AsNoTracking()
+            .Where(g => g.Id == groupId)
+            .Select(g => new
+            {
+                g.Id,
+                g.CreatedByUserId
+            })
+            .FirstOrDefaultAsync();
 
         if (group == null)
             return Result<Guid>.Failure(GroupErrors.GroupNotFound);
 
-        var groupMembers = memberIds.Select(memberId => new GroupMembers
+        if (group.CreatedByUserId != requesterId)
+            return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanAddMembers);
+
+        var userExists = await _context.user
+            .AnyAsync(u => u.Id == memberId);
+
+        if (!userExists)
+            return Result<Guid>.Failure(GroupErrors.UserNotFound);
+
+        var memberExists = await _context.group_members
+            .AnyAsync(gm => gm.GroupId == groupId && gm.UserId == memberId);
+
+        if (memberExists)
+            return Result<Guid>.Failure(GroupErrors.MemberAlreadyExists);
+
+        var newMember = new GroupMembers
         {
+            Id = Guid.NewGuid(),
             GroupId = groupId,
             UserId = memberId
-        }).ToList();
+        };
 
-        await _context.group_members.AddRangeAsync(groupMembers);
-
+        await _context.group_members.AddAsync(newMember);
         await _context.SaveChangesAsync();
 
         return Result<Guid>.Success(groupId);

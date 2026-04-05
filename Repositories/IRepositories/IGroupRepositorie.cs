@@ -7,7 +7,7 @@ namespace GroupsMicroservice.Repositories.IRepositories;
 public interface IGroupRepositorie
 {
     Task<Result<Guid>> AddGroupAsync(Guid userId, AddGroupRequest request);
-    Task<Result<Guid>> AddMembersAsync(Guid groupId, IEnumerable<Guid> memberIds);
+    Task<Result<Guid>> AddMemberAsync(Guid groupId, Guid memberId, Guid requesterId);
     Task<Result<IEnumerable<GroupDto>>> GetGroupsAsync();
 
 }

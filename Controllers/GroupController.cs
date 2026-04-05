@@ -1,4 +1,6 @@
-﻿using GroupsMicroservice.Models.Request;
+﻿using AutoMapper.Execution;
+using GroupsMicroservice.Models.Request;
+using GroupsMicroservice.Repositories;
 using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Services.IServices;
 using GroupsMicroservice.Utilities.Constants;
@@ -53,21 +55,48 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return NoContent();
     }
 
-    [HttpPost("AddMembers/{groupId}")]
+    [HttpPost("AddMember")]
     [Authorize]
-    public async Task<IActionResult> AddMembers([FromRoute] Guid groupId, [FromBody] IEnumerable<Guid> memberIds)
+    public async Task<IActionResult> AddMembers([FromBody] AddMemberRequest request)
     {
-        var canAddMembers = _authContextService.HasPermission(GroupPermissions.CanUpdate);
-        if (!canAddMembers)
+        if (_authContextService.GetUserId() is not Guid requesterId)
+            return UnauthorizedResponse();
+
+        if (!_authContextService.HasPermission(GroupPermissions.CanUpdate))
             return ForbiddenResponse();
-        var result = await _groupRepositorie.AddMembersAsync(groupId, memberIds);
+
+        var result = await _groupRepositorie.AddMemberAsync(request.GroupId, request.UserId, requesterId);
         if (!result.IsSuccess)
-            return NotFound(new
+        {
+            return result.error.Code switch
             {
-                statusCode = 404,
-                error = result.error.Code,
-                message = result.error.Message
-            });
+                "GroupNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "UserNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "MemberAlreadyExists" => Conflict(new
+                {
+                    statusCode = 409,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "OnlyOwnerCanAddMembers" => ForbiddenResponse("Only the group owner can add members to the group."),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while adding the member to the group."
+                })
+            };
+        }
         return NoContent();
     }
 
@@ -84,4 +113,6 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
 
         return Ok(groups.Value);
     }
+
+
 }
