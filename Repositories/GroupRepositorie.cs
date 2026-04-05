@@ -173,4 +173,28 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
         return Result<IEnumerable<GroupMemberDto>>.Success(members);
     }
+
+    public async Task<Result<Guid>> RemoveMemberAsync(Guid groupId, Guid memberId, Guid requesterId)
+    {
+        var groupOwnerId = await _context.group
+            .AsNoTracking()
+            .Where(g => g.Id == groupId)
+            .Select(g => (Guid?)g.CreatedByUserId)
+            .FirstOrDefaultAsync();
+
+        if (groupOwnerId == null)
+            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+
+        if (groupOwnerId != requesterId)
+            return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanRemoveMembers);
+
+        var affectedRows = await _context.group_members
+            .Where(gm => gm.GroupId == groupId && gm.UserId == memberId)
+            .ExecuteDeleteAsync();
+
+        if (affectedRows == 0)
+            return Result<Guid>.Failure(GroupErrors.MemberNotFound);
+
+        return Result<Guid>.Success(groupId);
+    }
 }

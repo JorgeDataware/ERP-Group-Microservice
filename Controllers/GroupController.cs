@@ -190,4 +190,42 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         var members = await _groupRepositorie.GetMembersAsync(groupId);
         return Ok(members.Value);
     }
+
+    [HttpDelete("RemoveMember")]
+    [Authorize]
+    public async Task<IActionResult> RemoveMember([FromBody] RemoveMemberRequest request)
+    {
+        var canRemoveMembers = _authContextService.HasPermission(GroupPermissions.CanUpdate);
+        if (!canRemoveMembers)
+            return ForbiddenResponse();
+        if (_authContextService.GetUserId() is not Guid requesterId)
+            return UnauthorizedResponse();
+        var result = await _groupRepositorie.RemoveMemberAsync(request.GroupId, request.UserId, requesterId);
+        if (!result.IsSuccess)
+        {
+            return result.error.Code switch
+            {
+                "GroupNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "MemberNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "OnlyOwnerCanRemoveMembers" => ForbiddenResponse("Only the group owner can remove members from the group."),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while removing the member from the group."
+                })
+            };
+        }
+        return NoContent();
+    }
 }
