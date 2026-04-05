@@ -52,6 +52,14 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
 
         var result = await _groupRepositorie.AddGroupAsync(userId, request);
 
+        if (!result.IsSuccess)
+            return Conflict(new
+            {
+                statusCode = 409,
+                error = result.error.Code,
+                message = result.error.Message
+            });
+
         return NoContent();
     }
 
@@ -188,6 +196,26 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
             return ForbiddenResponse();
         
         var members = await _groupRepositorie.GetMembersAsync(groupId);
+
+        if (!members.IsSuccess)
+        {
+            return members.error.Code switch
+            {
+                "GroupNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = members.error.Code,
+                    message = members.error.Message
+                }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while retrieving the group members."
+                })
+            };
+        }
+
         return Ok(members.Value);
     }
 

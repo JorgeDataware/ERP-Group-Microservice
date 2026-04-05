@@ -9,7 +9,6 @@ using GroupsMicroservice.Utilities;
 using GroupsMicroservice.Utilities.Constants;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
-using System.Reflection.Metadata.Ecma335;
 using UsersMicroservice.Utilities.Abstractions;
 
 namespace GroupsMicroservice.Repositories;
@@ -41,9 +40,19 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
     public async Task<Result<Guid>> AddGroupAsync(Guid userId, AddGroupRequest request)
     {
-        var newGroup = _mapper.Map<Group>(request);
+        var groupExists = await _context.group
+            .AnyAsync(g => g.Name == request.Name);
 
-        Console.WriteLine("Id del usuario que crea el grupo: " + userId);
+        if (groupExists)
+            return Result<Guid>.Failure(GroupErrors.GroupAlreadyExists);
+
+        var userExists = await _context.user
+            .AnyAsync(u => u.Id == userId);
+
+        if (!userExists)
+            return Result<Guid>.Failure(GroupErrors.UserNotFound);
+
+        var newGroup = _mapper.Map<Group>(request);
 
         newGroup.CreatedByUserId = userId;
 
@@ -59,6 +68,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
         var group = await _context.group
             .AsNoTracking()
             .Where(g => g.Id == groupId)
+            .Where(g => g.Status == Status.Active)
             .Select(g => new
             {
                 g.Id,
@@ -67,7 +77,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
             .FirstOrDefaultAsync();
 
         if (group == null)
-            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+            return Result<Guid>.Failure(GroupErrors.GroupNotFoundOrInactive);
 
         if (group.CreatedByUserId != requesterId)
             return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanAddMembers);
@@ -103,7 +113,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
             .FirstOrDefaultAsync(g => g.Id == groupId);
 
         if (groupToUpdate == null)
-            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+            return Result<Guid>.Failure(GroupErrors.GroupNotFoundOrInactive);
 
         if (groupToUpdate.CreatedByUserId != requesterId)
             return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanEditGroup);
@@ -146,7 +156,7 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
         var group = await _dbConnection.QueryFirstOrDefaultAsync<GetCompleteGroupDto>(groupSql, parameters);
 
         if (group == null)
-            return Result<GetCompleteGroupDto>.Failure(GroupErrors.GroupNotFound);
+            return Result<GetCompleteGroupDto>.Failure(GroupErrors.GroupNotFoundOrInactive);
 
         var members = await _dbConnection.QueryAsync<GroupMemberDto>(membersSql, parameters);
 
@@ -157,6 +167,13 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
     public async Task<Result<IEnumerable<GroupMemberDto>>> GetMembersAsync(Guid groupId)
     {
+        var groupExists = await _context.group
+            .AsNoTracking()
+            .AnyAsync(g => g.Id == groupId);
+
+        if (!groupExists)
+            return Result<IEnumerable<GroupMemberDto>>.Failure(GroupErrors.GroupNotFoundOrInactive);
+
         const string membersSql = @"
             SELECT
                 u.id,
@@ -179,12 +196,12 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
     {
         var groupOwnerId = await _context.group
             .AsNoTracking()
-            .Where(g => g.Id == groupId)
+            .Where(g => g.Id == groupId && g.Status == Status.Active)
             .Select(g => (Guid?)g.CreatedByUserId)
             .FirstOrDefaultAsync();
 
         if (groupOwnerId == null)
-            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+            return Result<Guid>.Failure(GroupErrors.GroupNotFoundOrInactive);
 
         if (groupOwnerId != requesterId)
             return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanRemoveMembers);
@@ -205,10 +222,13 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
             .FirstOrDefaultAsync(g => g.Id == groupId);
 
         if (groupToUpdate == null)
-            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+            return Result<Guid>.Failure(GroupErrors.GroupNotFoundOrInactive);
 
         if (groupToUpdate.CreatedByUserId != requesterId && SystemUsers.SuperAdminId != requesterId)
             return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanDeactivateGroup);
+
+        if (groupToUpdate.Status == Status.Inactive)
+            return Result<Guid>.Failure(GroupErrors.UnactiveGroup);
 
         groupToUpdate.Status = Status.Inactive;
 
