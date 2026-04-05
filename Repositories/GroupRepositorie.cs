@@ -95,4 +95,22 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
         return Result<Guid>.Success(groupId);
     }
+
+    public async Task<Result<Guid>> EditGroupAsync(Guid groupId, Guid requesterId, EditGroupRequest request)
+    {
+        var groupToUpdate = await _context.group
+            .FirstOrDefaultAsync(g => g.Id == groupId);
+
+        if (groupToUpdate == null)
+            return Result<Guid>.Failure(GroupErrors.GroupNotFound);
+
+        if (groupToUpdate.CreatedByUserId != requesterId)
+            return Result<Guid>.Failure(GroupErrors.OnlyOwnerCanEditGroup);
+
+        _mapper.Map(request, groupToUpdate);
+
+        await _context.SaveChangesAsync();
+
+        return Result<Guid>.Success(groupId);
+    }
 }

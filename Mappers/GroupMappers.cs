@@ -9,5 +9,8 @@ public class GroupMappers : Profile
     public GroupMappers()
     {
         CreateMap<AddGroupRequest, Group>().ReverseMap();
+        CreateMap<EditGroupRequest, Group>()
+            .ForMember(dest => dest.Id, opt => opt.Ignore())
+            .ReverseMap();
     }
 }

@@ -114,5 +114,39 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return Ok(groups.Value);
     }
 
+    [HttpPatch("EditGroup/{groupId}")]
+    [Authorize]
+    public async Task<IActionResult> EditGroup([FromRoute] Guid groupId, [FromBody] EditGroupRequest request)
+    {
+        var canEditGroup = _authContextService.HasPermission(GroupPermissions.CanUpdate);
 
+        if (!canEditGroup)
+            return ForbiddenResponse();
+
+        if (_authContextService.GetUserId() is not Guid userId)
+            return UnauthorizedResponse();
+
+        var result = await _groupRepositorie.EditGroupAsync(groupId, userId, request);
+
+        if (!result.IsSuccess)
+        {
+            return result.error.Code switch
+            {
+                "GroupNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                "OnlyOwnerCanEditGroup" => ForbiddenResponse("Only the group owner can edit the group."),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while editing the group."
+                })
+            };
+        }
+        return NoContent();
+    }
 }
