@@ -113,4 +113,44 @@ public class GroupRepositori(AppDbContext context, IDbConnection dbConnection, I
 
         return Result<Guid>.Success(groupId);
     }
+
+    public async Task<Result<GetCompleteGroupDto>> GetGroupByIdAsync(Guid groupId)
+    {
+        const string groupSql = @"
+        SELECT
+            g.id,
+            g.name,
+            g.description,
+            g.status,
+            g.created_by_user_id AS created_by_user_id,
+            CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS owner
+        FROM
+            ""group"" g
+        JOIN ""user"" u ON g.created_by_user_id = u.id
+        WHERE g.id = @GroupId;";
+
+        const string membersSql = @"
+        SELECT
+            u.id,
+            u.user_name,
+            CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS complete_name
+        FROM
+            group_members gm
+        JOIN ""user"" u ON gm.user_id = u.id
+        JOIN ""group"" g ON gm.group_id = g.id
+        WHERE g.id = @GroupId;";
+
+        var parameters = new { GroupId = groupId };
+
+        var group = await _dbConnection.QueryFirstOrDefaultAsync<GetCompleteGroupDto>(groupSql, parameters);
+
+        if (group == null)
+            return Result<GetCompleteGroupDto>.Failure(GroupErrors.GroupNotFound);
+
+        var members = await _dbConnection.QueryAsync<GroupMemberDto>(membersSql, parameters);
+
+        group.Members = members;
+
+        return Result<GetCompleteGroupDto>.Success(group);
+    }
 }

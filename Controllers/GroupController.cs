@@ -149,4 +149,33 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         }
         return NoContent();
     }
+
+    [HttpGet("GetGroupById/{groupId}")]
+    [Authorize]
+    public async Task<IActionResult> GetGroupById([FromRoute] Guid groupId)
+    {
+        var canSeeGroups = _authContextService.HasPermission(GroupPermissions.CanRead);
+        if (!canSeeGroups)
+            return ForbiddenResponse();
+        var result = await _groupRepositorie.GetGroupByIdAsync(groupId);
+        if (!result.IsSuccess)
+        {
+            return result.error.Code switch
+            {
+                "GroupNotFound" => NotFound(new
+                {
+                    statusCode = 404,
+                    error = result.error.Code,
+                    message = result.error.Message
+                }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    statusCode = 500,
+                    error = "InternalServerError",
+                    message = "An unexpected error occurred while retrieving the group."
+                })
+            };
+        }
+        return Ok(result.Value);
+    }
 }
