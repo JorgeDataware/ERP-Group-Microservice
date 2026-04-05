@@ -53,6 +53,24 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return NoContent();
     }
 
+    [HttpPost("AddMembers/{groupId}")]
+    [Authorize]
+    public async Task<IActionResult> AddMembers([FromRoute] Guid groupId, [FromBody] IEnumerable<Guid> memberIds)
+    {
+        var canAddMembers = _authContextService.HasPermission(GroupPermissions.CanUpdate);
+        if (!canAddMembers)
+            return ForbiddenResponse();
+        var result = await _groupRepositorie.AddMembersAsync(groupId, memberIds);
+        if (!result.IsSuccess)
+            return NotFound(new
+            {
+                statusCode = 404,
+                error = result.error.Code,
+                message = result.error.Message
+            });
+        return NoContent();
+    }
+
     [HttpGet("GetGroups")]
     [Authorize]
     public async Task<IActionResult> GetGroups()
@@ -66,6 +84,4 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
 
         return Ok(groups.Value);
     }
-
-
 }
