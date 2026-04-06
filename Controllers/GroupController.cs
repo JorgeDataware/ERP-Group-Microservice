@@ -71,6 +71,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardError(500, "EGRIN500", message);
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/
     [HttpPost("AddGroup")]
     [Authorize]
     public async Task<IActionResult> AddGroup([FromBody] AddGroupRequest request)
@@ -99,6 +100,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(201, "SGRCR201", "Group created successfully.", Array.Empty<object>());
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/members
     [HttpPost("AddMember")]
     [Authorize]
     public async Task<IActionResult> AddMembers([FromBody] AddMemberRequest request)
@@ -124,6 +126,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(200, "SGRMB200", "Group member added successfully.", Array.Empty<object>());
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/
     [HttpGet("GetGroups")]
     [Authorize]
     public async Task<IActionResult> GetGroups()
@@ -139,6 +142,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(200, "SGRRD200", "Groups retrieved successfully.", groupsArray);
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/{groupId}
     [HttpPatch("EditGroup/{groupId}")]
     [Authorize]
     public async Task<IActionResult> EditGroup([FromRoute] Guid groupId, [FromBody] EditGroupRequest request)
@@ -166,6 +170,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(200, "SGRUP200", "Group updated successfully.", Array.Empty<object>());
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/{groupId}
     [HttpGet("GetGroupById/{groupId}")]
     [Authorize]
     public async Task<IActionResult> GetGroupById([FromRoute] Guid groupId)
@@ -185,6 +190,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(200, "SGRRD200", "Group retrieved successfully.", new[] { result.Value });
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/{groupId}/members
     [HttpGet("GetGroupMembers/{groupId}")]
     [Authorize]
     public async Task<IActionResult> GetGroupMembers([FromRoute] Guid groupId)
@@ -208,6 +214,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(200, "SGRRD200", "Group members retrieved successfully.", membersArray);
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/{groupId}/members
     [HttpDelete("RemoveMember")]
     [Authorize]
     public async Task<IActionResult> RemoveMember([FromBody] RemoveMemberRequest request)
@@ -231,6 +238,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         return StandardSuccess(200, "SGRMB200", "Group member removed successfully.", Array.Empty<object>());
     }
 
+    // Corresponde a: https://mi-gateway.onrender.com/groups/{groupId}/deactivate
     [HttpPatch("{groupId}/deactivate")]
     [Authorize]
     public async Task<IActionResult> DeactivateGroup([FromRoute] Guid groupId)

@@ -1,0 +1,1692 @@
+{
+  "service": {
+    "name": "Groups Microservice",
+    "description": "Microservicio para la gestión de grupos de trabajo. Permite crear grupos, administrar miembros, editar información de grupos y desactivar grupos. Implementa control de acceso basado en permisos JWT y reglas de propiedad (owner).",
+    "baseInternalRoutes": [
+      "api/Group"
+    ],
+    "technology": ".NET Core 8 + Entity Framework Core + Dapper + PostgreSQL",
+    "authentication": "JWT Bearer Token (header Authorization o cookie 'jwt')",
+    "notes": [
+      "Todos los endpoints devuelven un StandardResponse con estructura: { statusCode, intOpCode, message, data[] }",
+      "data siempre es un array, incluso si está vacío",
+      "La autenticación se puede enviar por header Authorization (Bearer token) o cookie 'jwt'",
+      "Los permisos se validan desde los claims del JWT con tipo 'permission'",
+      "El userId se extrae del claim NameIdentifier del JWT",
+      "Las reglas de ownership se validan contra el campo CreatedByUserId del grupo",
+      "SuperAdmin (00000000-0000-0000-0000-000000000001) tiene permisos especiales en algunos endpoints"
+    ]
+  },
+  "globalEnums": [
+    {
+      "name": "Status",
+      "description": "Estado de entidades (Group, User)",
+      "values": [
+        {
+          "name": "Active",
+          "value": 1,
+          "description": "Entidad activa y operativa"
+        },
+        {
+          "name": "Inactive",
+          "value": 2,
+          "description": "Entidad desactivada"
+        }
+      ]
+    }
+  ],
+  "globalPermissions": [
+    {
+      "name": "canCreate_Groups",
+      "description": "Permite crear nuevos grupos",
+      "constant": "GroupPermissions.CanCreate"
+    },
+    {
+      "name": "canRead_Groups",
+      "description": "Permite leer grupos y sus miembros",
+      "constant": "GroupPermissions.CanRead"
+    },
+    {
+      "name": "canUpdate_Groups",
+      "description": "Permite editar grupos, agregar y remover miembros",
+      "constant": "GroupPermissions.CanUpdate"
+    },
+    {
+      "name": "canDelete_Groups",
+      "description": "Permite desactivar grupos",
+      "constant": "GroupPermissions.CanDelete"
+    }
+  ],
+  "globalConstants": [
+    {
+      "name": "SuperAdminId",
+      "value": "00000000-0000-0000-0000-000000000001",
+      "description": "UUID del super administrador del sistema",
+      "usage": "Tiene permisos especiales para desactivar grupos sin ser owner"
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "add-group",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/",
+      "internalEndpoint": "api/Group/AddGroup",
+      "httpMethod": "POST",
+      "summary": "Crear un nuevo grupo",
+      "description": "Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticamente en el propietario (owner) del grupo. Valida que no exista un grupo con el mismo nombre y que el usuario exista en la base de datos.",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canCreate_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canCreate_Groups' desde los claims JWT del tipo 'permission'. Si no tiene el permiso, retorna 403.",
+      "ownershipRules": [
+        "El usuario autenticado se establece como CreatedByUserId (owner) del grupo"
+      ],
+      "routeParams": [],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        {
+          "name": "Content-Type",
+          "required": true,
+          "description": "application/json",
+          "example": "application/json"
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "required": true,
+            "description": "Nombre único del grupo"
+          },
+          "description": {
+            "type": "string",
+            "required": true,
+            "description": "Descripción del grupo"
+          }
+        }
+      },
+      "requestBodyExample": {
+        "name": "Equipo de Desarrollo",
+        "description": "Grupo para el equipo de desarrollo de software"
+      },
+      "fieldsOptional": [],
+      "fieldsRequired": [
+        "name",
+        "description"
+      ],
+      "validationRules": [
+        "name debe ser único (no puede existir otro grupo con ese nombre)",
+        "El usuario debe existir en la tabla 'user'"
+      ],
+      "responses": [
+        {
+          "statusCode": 201,
+          "intOpCode": "SGRCR201",
+          "message": "Group created successfully.",
+          "whenItHappens": "El grupo se creó exitosamente",
+          "responseBodyShape": {
+            "statusCode": 201,
+            "intOpCode": "SGRCR201",
+            "message": "string",
+            "data": "array (siempre vacío en este endpoint)"
+          },
+          "responseExample": {
+            "statusCode": 201,
+            "intOpCode": "SGRCR201",
+            "message": "Group created successfully.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 401,
+          "intOpCode": "EGRAU401",
+          "message": "User authentication is required to add a group.",
+          "whenItHappens": "El userId no pudo extraerse del JWT (claim NameIdentifier inválido o faltante)",
+          "responseBodyShape": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "User authentication is required to add a group.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "You do not have permission to perform this action.",
+          "whenItHappens": "El usuario no tiene el permiso 'canCreate_Groups' en sus claims JWT",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "You do not have permission to perform this action.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified user was not found.",
+          "whenItHappens": "El userId extraído del JWT no existe en la tabla 'user'",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified user was not found.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 409,
+          "intOpCode": "EGRCF409",
+          "message": "A group with the specified name already exists.",
+          "whenItHappens": "Ya existe un grupo con el mismo 'name'",
+          "responseBodyShape": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "A group with the specified name already exists.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while adding the group.",
+          "whenItHappens": "Cualquier otro error no contemplado (catch-all en switch default)",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while adding the group.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "El nombre del grupo debe ser único en toda la base de datos",
+        "El usuario que crea el grupo se convierte automáticamente en owner (CreatedByUserId)",
+        "El grupo se crea con Status = Active por defecto",
+        "El usuario debe existir en la tabla 'user' antes de poder crear un grupo"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.AddGroupAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission",
+          "IAuthContextService.GetUserId"
+        ],
+        "helpers": [
+          "AutoMapper"
+        ],
+        "entities": [
+          "Group",
+          "User"
+        ],
+        "claims": [
+          "NameIdentifier (userId)",
+          "permission: canCreate_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Este endpoint NO devuelve el ID del grupo creado en la respuesta actual, solo confirma creación",
+        "Si necesitas el groupId después de crear, debes llamar a GetGroups o buscar por nombre",
+        "Ideal para formularios de creación de grupos",
+        "Muestra mensaje de error específico al usuario si el nombre ya existe (409)",
+        "El backend valida permisos, pero el frontend debería ocultar/deshabilitar UI si el usuario no tiene canCreate_Groups"
+      ],
+      "inferenceNotes": [
+        "El repositorio devuelve Result<Guid> con el groupId, pero el controller no lo incluye en la respuesta 201 (solo confirma éxito)"
+      ]
+    },
+    {
+      "id": "add-member",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/members",
+      "internalEndpoint": "api/Group/AddMember",
+      "httpMethod": "POST",
+      "summary": "Agregar un miembro a un grupo",
+      "description": "Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner/creador) del grupo puede agregar miembros. El grupo debe estar activo (Status = Active).",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canUpdate_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canUpdate_Groups' desde los claims JWT. Además, se valida que el requesterId sea el owner del grupo.",
+      "ownershipRules": [
+        "Solo el owner del grupo (CreatedByUserId) puede agregar miembros",
+        "El requesterId debe coincidir con group.CreatedByUserId"
+      ],
+      "routeParams": [],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        {
+          "name": "Content-Type",
+          "required": true,
+          "description": "application/json",
+          "example": "application/json"
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "required": true,
+            "description": "ID del grupo al que se agregará el miembro"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "required": true,
+            "description": "ID del usuario que será agregado como miembro"
+          }
+        }
+      },
+      "requestBodyExample": {
+        "groupId": "550e8400-e29b-41d4-a716-446655440000",
+        "userId": "660e8400-e29b-41d4-a716-446655440001"
+      },
+      "fieldsOptional": [],
+      "fieldsRequired": [
+        "groupId",
+        "userId"
+      ],
+      "validationRules": [
+        "El grupo debe existir y estar activo (Status = Active)",
+        "El usuario a agregar debe existir en la tabla 'user'",
+        "El usuario no debe ser miembro del grupo ya",
+        "El requesterId debe ser el owner del grupo"
+      ],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRMB200",
+          "message": "Group member added successfully.",
+          "whenItHappens": "El miembro se agregó exitosamente al grupo",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRMB200",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRMB200",
+            "message": "Group member added successfully.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 401,
+          "intOpCode": "EGRAU401",
+          "message": "Invalid or missing user authentication.",
+          "whenItHappens": "El userId no pudo extraerse del JWT",
+          "responseBodyShape": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "Invalid or missing user authentication.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "Only the group owner can add members to the group.",
+          "whenItHappens": "El usuario no tiene el permiso 'canUpdate_Groups' O no es el owner del grupo",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "Only the group owner can add members to the group.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified user was not found.",
+          "whenItHappens": "El userId a agregar no existe en la tabla 'user'",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified user was not found.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 409,
+          "intOpCode": "EGRCF409",
+          "message": "The specified group was not found or is inactive.",
+          "whenItHappens": "El grupo no existe o está inactivo (Status = Inactive), O el miembro ya existe en el grupo",
+          "responseBodyShape": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "The specified member is already part of the group.",
+            "data": []
+          },
+          "notes": "El mensaje puede variar: 'The specified group was not found or is inactive.' o 'The specified member is already part of the group.'"
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while adding the member to the group.",
+          "whenItHappens": "Cualquier otro error no contemplado",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while adding the member to the group.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Solo el owner del grupo puede agregar miembros",
+        "El grupo debe estar en estado Active",
+        "El usuario a agregar debe existir en la base de datos",
+        "No se puede agregar un usuario que ya es miembro del grupo",
+        "Se crea un nuevo registro en la tabla 'group_members' con un nuevo Guid"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.AddMemberAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission",
+          "IAuthContextService.GetUserId"
+        ],
+        "helpers": [],
+        "entities": [
+          "Group",
+          "User",
+          "GroupMembers"
+        ],
+        "claims": [
+          "NameIdentifier (userId)",
+          "permission: canUpdate_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Este endpoint requiere tanto permiso general como ownership",
+        "Ideal para componentes de gestión de miembros de grupo",
+        "Debe permitir al frontend seleccionar usuarios de una lista para agregarlos",
+        "Mostrar error claro si el usuario ya es miembro (409)",
+        "Mostrar error si el grupo está inactivo (409)",
+        "Después de agregar, conviene refrescar la lista de miembros del grupo",
+        "Solo habilitar UI si el usuario actual es el owner del grupo"
+      ],
+      "inferenceNotes": [
+        "El error 403 puede ocurrir por falta de permiso general O por no ser owner (dos validaciones separadas)"
+      ]
+    },
+    {
+      "id": "get-groups",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/",
+      "internalEndpoint": "api/Group/GetGroups",
+      "httpMethod": "GET",
+      "summary": "Obtener todos los grupos",
+      "description": "Obtiene una lista completa de todos los grupos registrados en el sistema, incluyendo información básica y el nombre del propietario. No hay paginación implementada.",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canRead_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canRead_Groups' desde los claims JWT. No se valida ownership porque es un listado general.",
+      "ownershipRules": [
+        "No aplica - listado general para usuarios con permiso de lectura"
+      ],
+      "routeParams": [],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": null,
+      "requestBodyExample": null,
+      "fieldsOptional": [],
+      "fieldsRequired": [],
+      "validationRules": [],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRRD200",
+          "message": "Groups retrieved successfully.",
+          "whenItHappens": "La consulta se ejecutó exitosamente (puede devolver array vacío si no hay grupos)",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRRD200",
+            "message": "string",
+            "data": "array of GroupDto"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRRD200",
+            "message": "Groups retrieved successfully.",
+            "data": [
+              {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Equipo de Desarrollo",
+                "description": "Grupo para el equipo de desarrollo de software",
+                "owner": "Juan Carlos Pérez",
+                "status": 1
+              },
+              {
+                "id": "660e8400-e29b-41d4-a716-446655440001",
+                "name": "Equipo de QA",
+                "description": "Grupo de aseguramiento de calidad",
+                "owner": "María González López",
+                "status": 1
+              }
+            ]
+          },
+          "notes": "owner es el nombre completo concatenado del usuario (FirstName + MiddleName + LastName). status es numérico: 1 = Active, 2 = Inactive"
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "You do not have permission to perform this action.",
+          "whenItHappens": "El usuario no tiene el permiso 'canRead_Groups' en sus claims JWT",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "You do not have permission to perform this action.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Devuelve TODOS los grupos sin filtrar por status (incluye Active e Inactive)",
+        "No hay paginación implementada",
+        "El owner se calcula con CONCAT_WS concatenando FirstName, MiddleName (si existe) y LastName",
+        "Usa Dapper para consulta SQL directa (no Entity Framework)"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.GetGroupsAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission"
+        ],
+        "helpers": [
+          "Dapper"
+        ],
+        "entities": [
+          "Group",
+          "User"
+        ],
+        "claims": [
+          "permission: canRead_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Ideal para poblar tablas/listas de grupos",
+        "No hay paginación, considerar agregar paginación en frontend si la lista crece mucho",
+        "El campo 'status' es numérico (1 = Active, 2 = Inactive), convertir a texto legible en UI",
+        "El campo 'owner' ya viene como texto listo para mostrar",
+        "Guardar el 'id' de cada grupo para operaciones posteriores (editar, ver detalle, etc.)",
+        "Puede devolver array vacío si no hay grupos, manejar UI para lista vacía",
+        "NO devuelve información de miembros, solo datos básicos del grupo"
+      ],
+      "inferenceNotes": [
+        "No se filtran grupos por ownership, todos los usuarios con permiso canRead_Groups ven todos los grupos"
+      ]
+    },
+    {
+      "id": "edit-group",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/{groupId}",
+      "internalEndpoint": "api/Group/EditGroup/{groupId}",
+      "httpMethod": "PATCH",
+      "summary": "Editar información de un grupo",
+      "description": "Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario (owner/creador) del grupo puede editarlo. El grupo debe estar activo (Status = Active).",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canUpdate_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canUpdate_Groups' desde los claims JWT. Además, se valida que el userId sea el owner del grupo.",
+      "ownershipRules": [
+        "Solo el owner del grupo (CreatedByUserId) puede editarlo",
+        "El userId del JWT debe coincidir con group.CreatedByUserId"
+      ],
+      "routeParams": [
+        {
+          "name": "groupId",
+          "type": "uuid",
+          "required": true,
+          "description": "ID del grupo a editar"
+        }
+      ],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        {
+          "name": "Content-Type",
+          "required": true,
+          "description": "application/json",
+          "example": "application/json"
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "required": true,
+            "description": "Nuevo nombre del grupo"
+          },
+          "description": {
+            "type": "string",
+            "required": true,
+            "description": "Nueva descripción del grupo"
+          }
+        }
+      },
+      "requestBodyExample": {
+        "name": "Equipo de Desarrollo Frontend",
+        "description": "Grupo especializado en desarrollo de interfaces de usuario"
+      },
+      "fieldsOptional": [],
+      "fieldsRequired": [
+        "name",
+        "description"
+      ],
+      "validationRules": [
+        "El grupo debe existir",
+        "El grupo debe estar activo (Status = Active)",
+        "El userId debe ser el owner del grupo (CreatedByUserId)"
+      ],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRUP200",
+          "message": "Group updated successfully.",
+          "whenItHappens": "El grupo se actualizó exitosamente",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRUP200",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRUP200",
+            "message": "Group updated successfully.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 401,
+          "intOpCode": "EGRAU401",
+          "message": "Invalid or missing user authentication.",
+          "whenItHappens": "El userId no pudo extraerse del JWT",
+          "responseBodyShape": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "Invalid or missing user authentication.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "Only the group owner can edit the group.",
+          "whenItHappens": "El usuario no tiene el permiso 'canUpdate_Groups' O no es el owner del grupo",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "Only the group owner can edit the group.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified group was not found.",
+          "whenItHappens": "El groupId no existe en la base de datos",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified group was not found.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 409,
+          "intOpCode": "EGRCF409",
+          "message": "The group is already inactive.",
+          "whenItHappens": "El grupo tiene Status = Inactive",
+          "responseBodyShape": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "The group is already inactive.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while editing the group.",
+          "whenItHappens": "Cualquier otro error no contemplado",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while editing the group.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Solo el owner del grupo puede editarlo",
+        "No se puede editar un grupo inactivo",
+        "Se actualizan ambos campos (name y description) mediante AutoMapper",
+        "No se valida unicidad de nombre (puede generar conflictos si se intenta usar nombre duplicado)"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.EditGroupAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission",
+          "IAuthContextService.GetUserId"
+        ],
+        "helpers": [
+          "AutoMapper"
+        ],
+        "entities": [
+          "Group"
+        ],
+        "claims": [
+          "NameIdentifier (userId)",
+          "permission: canUpdate_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Usar en formularios de edición de grupos",
+        "Validar en frontend que el usuario actual es el owner antes de mostrar UI de edición",
+        "El groupId debe venir de la URL o contexto previo (ej: desde tabla de grupos)",
+        "Después de editar, refrescar vista de detalle del grupo o lista de grupos",
+        "Manejar 409 mostrando mensaje que no se puede editar grupo inactivo",
+        "Considerar que NO se valida unicidad de nombre en el backend (puede causar problemas)"
+      ],
+      "inferenceNotes": [
+        "Inconsistencia detectada: NO se valida unicidad de nombre al editar, pero sí al crear. Esto podría permitir nombres duplicados al editar."
+      ]
+    },
+    {
+      "id": "get-group-by-id",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/{groupId}",
+      "internalEndpoint": "api/Group/GetGroupById/{groupId}",
+      "httpMethod": "GET",
+      "summary": "Obtener detalle completo de un grupo",
+      "description": "Obtiene información detallada de un grupo específico, incluyendo datos básicos del grupo, información del propietario, y lista completa de miembros con sus datos personales.",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canRead_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canRead_Groups' desde los claims JWT. No se valida ownership.",
+      "ownershipRules": [
+        "No aplica - cualquier usuario con permiso de lectura puede ver detalles de cualquier grupo"
+      ],
+      "routeParams": [
+        {
+          "name": "groupId",
+          "type": "uuid",
+          "required": true,
+          "description": "ID del grupo a consultar"
+        }
+      ],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": null,
+      "requestBodyExample": null,
+      "fieldsOptional": [],
+      "fieldsRequired": [],
+      "validationRules": [
+        "El grupo debe existir"
+      ],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRRD200",
+          "message": "Group retrieved successfully.",
+          "whenItHappens": "El grupo existe y se recuperó exitosamente con sus miembros",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRRD200",
+            "message": "string",
+            "data": "array of GetCompleteGroupDto (un solo elemento)"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRRD200",
+            "message": "Group retrieved successfully.",
+            "data": [
+              {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "Equipo de Desarrollo",
+                "description": "Grupo para el equipo de desarrollo de software",
+                "createdByUserId": "770e8400-e29b-41d4-a716-446655440002",
+                "owner": "Juan Carlos Pérez",
+                "status": 1,
+                "members": [
+                  {
+                    "id": "880e8400-e29b-41d4-a716-446655440003",
+                    "userName": "jperez",
+                    "completeName": "Juan Carlos Pérez"
+                  },
+                  {
+                    "id": "990e8400-e29b-41d4-a716-446655440004",
+                    "userName": "mgonzalez",
+                    "completeName": "María González López"
+                  }
+                ]
+              }
+            ]
+          },
+          "notes": "data es un array con un solo elemento. status es numérico (1=Active, 2=Inactive). members puede ser array vacío si no hay miembros."
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "You do not have permission to perform this action.",
+          "whenItHappens": "El usuario no tiene el permiso 'canRead_Groups' en sus claims JWT",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "You do not have permission to perform this action.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified group was not found.",
+          "whenItHappens": "El groupId no existe en la base de datos",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified group was not found.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while retrieving the group.",
+          "whenItHappens": "Cualquier otro error no contemplado",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while retrieving the group.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Devuelve información completa del grupo incluyendo lista de miembros",
+        "No filtra por status del grupo (devuelve tanto Active como Inactive)",
+        "Usa Dapper con dos queries SQL separadas (una para grupo, otra para miembros)",
+        "El owner se calcula concatenando FirstName, MiddleName y LastName",
+        "completeName de miembros también se calcula con CONCAT_WS"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.GetGroupByIdAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission"
+        ],
+        "helpers": [
+          "Dapper"
+        ],
+        "entities": [
+          "Group",
+          "User",
+          "GroupMembers"
+        ],
+        "claims": [
+          "permission: canRead_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Ideal para modales de detalle o páginas de vista de grupo",
+        "Devuelve toda la información necesaria en una sola llamada (grupo + miembros)",
+        "El array data tiene un solo elemento, acceder como data[0]",
+        "members puede ser array vacío, manejar UI apropiadamente",
+        "createdByUserId es útil para determinar si el usuario actual es owner y mostrar/ocultar botones de edición/eliminación",
+        "status numérico (1=Active, 2=Inactive), convertir a texto en UI",
+        "userName y completeName de miembros listos para mostrar"
+      ],
+      "inferenceNotes": [
+        "Inconsistencia con convención de nombres: GetCompleteGroupDto usa PascalCase mientras GroupDto usa camelCase",
+        "Este endpoint devuelve grupos sin importar su status (Active o Inactive)"
+      ]
+    },
+    {
+      "id": "get-group-members",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/{groupId}/members",
+      "internalEndpoint": "api/Group/GetGroupMembers/{groupId}",
+      "httpMethod": "GET",
+      "summary": "Obtener miembros de un grupo",
+      "description": "Obtiene la lista completa de miembros de un grupo específico, incluyendo ID, username y nombre completo de cada miembro.",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canRead_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canRead_Groups' desde los claims JWT. No se valida ownership.",
+      "ownershipRules": [
+        "No aplica - cualquier usuario con permiso de lectura puede ver miembros de cualquier grupo"
+      ],
+      "routeParams": [
+        {
+          "name": "groupId",
+          "type": "uuid",
+          "required": true,
+          "description": "ID del grupo del cual obtener los miembros"
+        }
+      ],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": null,
+      "requestBodyExample": null,
+      "fieldsOptional": [],
+      "fieldsRequired": [],
+      "validationRules": [
+        "El grupo debe existir"
+      ],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRRD200",
+          "message": "Group members retrieved successfully.",
+          "whenItHappens": "La consulta se ejecutó exitosamente (puede devolver array vacío si no hay miembros)",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRRD200",
+            "message": "string",
+            "data": "array of GroupMemberDto"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRRD200",
+            "message": "Group members retrieved successfully.",
+            "data": [
+              {
+                "id": "880e8400-e29b-41d4-a716-446655440003",
+                "userName": "jperez",
+                "completeName": "Juan Carlos Pérez"
+              },
+              {
+                "id": "990e8400-e29b-41d4-a716-446655440004",
+                "userName": "mgonzalez",
+                "completeName": "María González López"
+              }
+            ]
+          },
+          "notes": "Puede devolver array vacío si el grupo no tiene miembros"
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "You do not have permission to perform this action.",
+          "whenItHappens": "El usuario no tiene el permiso 'canRead_Groups' en sus claims JWT",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "You do not have permission to perform this action.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified group was not found.",
+          "whenItHappens": "El groupId no existe en la base de datos",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified group was not found.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while retrieving the group members.",
+          "whenItHappens": "Cualquier otro error no contemplado",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while retrieving the group members.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Devuelve solo usuarios que están en la tabla group_members para el groupId especificado",
+        "NO valida si el grupo está activo o inactivo, solo si existe",
+        "Usa Dapper con query SQL directa",
+        "completeName se calcula con CONCAT_WS(FirstName, MiddleName, LastName)"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.GetMembersAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission"
+        ],
+        "helpers": [
+          "Dapper"
+        ],
+        "entities": [
+          "Group",
+          "User",
+          "GroupMembers"
+        ],
+        "claims": [
+          "permission: canRead_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Útil para componentes que solo necesitan lista de miembros sin información completa del grupo",
+        "Más ligero que GetGroupById si solo necesitas miembros",
+        "Puede devolver array vacío si el grupo no tiene miembros, manejar UI apropiadamente",
+        "id es el userId del miembro (útil para operaciones posteriores como remover)",
+        "userName y completeName listos para mostrar en listas/tablas",
+        "Después de agregar/remover miembros, llamar este endpoint para refrescar lista"
+      ],
+      "inferenceNotes": [
+        "Este endpoint es funcionalmente similar a GetGroupById pero solo devuelve miembros, sin información del grupo",
+        "No valida status del grupo (a diferencia de AddMember/RemoveMember que requieren grupo activo)"
+      ]
+    },
+    {
+      "id": "remove-member",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/{groupId}/members",
+      "internalEndpoint": "api/Group/RemoveMember",
+      "httpMethod": "DELETE",
+      "summary": "Remover un miembro de un grupo",
+      "description": "Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (owner/creador) del grupo puede remover miembros. El grupo debe estar activo (Status = Active).",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canUpdate_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canUpdate_Groups' desde los claims JWT. Además, se valida que el requesterId sea el owner del grupo.",
+      "ownershipRules": [
+        "Solo el owner del grupo (CreatedByUserId) puede remover miembros",
+        "El requesterId debe coincidir con group.CreatedByUserId"
+      ],
+      "routeParams": [],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        {
+          "name": "Content-Type",
+          "required": true,
+          "description": "application/json",
+          "example": "application/json"
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "required": true,
+            "description": "ID del grupo del cual remover el miembro"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "required": true,
+            "description": "ID del usuario que será removido como miembro"
+          }
+        }
+      },
+      "requestBodyExample": {
+        "groupId": "550e8400-e29b-41d4-a716-446655440000",
+        "userId": "660e8400-e29b-41d4-a716-446655440001"
+      },
+      "fieldsOptional": [],
+      "fieldsRequired": [
+        "groupId",
+        "userId"
+      ],
+      "validationRules": [
+        "El grupo debe existir y estar activo (Status = Active)",
+        "El miembro debe existir en la tabla group_members para ese grupo",
+        "El requesterId debe ser el owner del grupo"
+      ],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRMB200",
+          "message": "Group member removed successfully.",
+          "whenItHappens": "El miembro se removió exitosamente del grupo",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRMB200",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRMB200",
+            "message": "Group member removed successfully.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 401,
+          "intOpCode": "EGRAU401",
+          "message": "Invalid or missing user authentication.",
+          "whenItHappens": "El userId no pudo extraerse del JWT",
+          "responseBodyShape": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "Invalid or missing user authentication.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "Only the group owner can remove members from the group.",
+          "whenItHappens": "El usuario no tiene el permiso 'canUpdate_Groups' O no es el owner del grupo",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "Only the group owner can remove members from the group.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified member was not found in the group.",
+          "whenItHappens": "El userId no existe en la tabla group_members para ese groupId (no es miembro del grupo)",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified member was not found in the group.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 409,
+          "intOpCode": "EGRCF409",
+          "message": "The specified group was not found or is inactive.",
+          "whenItHappens": "El grupo no existe o está inactivo (Status = Inactive)",
+          "responseBodyShape": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "The specified group was not found or is inactive.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while removing the member from the group.",
+          "whenItHappens": "Cualquier otro error no contemplado",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while removing the member from the group.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Solo el owner del grupo puede remover miembros",
+        "El grupo debe estar en estado Active",
+        "Usa ExecuteDeleteAsync de Entity Framework (eliminación física, no lógica)",
+        "Si affectedRows es 0, significa que el miembro no existía en el grupo"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.RemoveMemberAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission",
+          "IAuthContextService.GetUserId"
+        ],
+        "helpers": [],
+        "entities": [
+          "Group",
+          "GroupMembers"
+        ],
+        "claims": [
+          "NameIdentifier (userId)",
+          "permission: canUpdate_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Ideal para botones de 'Remover' o 'Eliminar miembro' en listas de miembros",
+        "Solo habilitar UI si el usuario actual es el owner del grupo",
+        "Después de remover, refrescar lista de miembros",
+        "Considerar confirmación antes de remover (modal de confirmación)",
+        "Manejar error 404 si el miembro ya no está en el grupo (puede ocurrir con concurrencia)",
+        "Manejar error 409 si el grupo está inactivo"
+      ],
+      "inferenceNotes": [
+        "Inconsistencia: El endpoint usa método DELETE pero espera body (algunos proxies/gateways pueden rechazar DELETE con body). RESTful típico usaría DELETE a /groups/{groupId}/members/{userId} sin body."
+      ]
+    },
+    {
+      "id": "deactivate-group",
+      "serviceName": "Groups Microservice",
+      "controllerName": "GroupController",
+      "gatewayEndpoint": "https://mi-gateway.onrender.com/groups/{groupId}/deactivate",
+      "internalEndpoint": "api/Group/{groupId}/deactivate",
+      "httpMethod": "PATCH",
+      "summary": "Desactivar un grupo",
+      "description": "Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/creador) del grupo o el SuperAdmin pueden desactivarlo. El grupo debe estar activo para poder desactivarse.",
+      "requiresAuth": true,
+      "authType": "bearer",
+      "requiredPermissions": [
+        "canDelete_Groups"
+      ],
+      "permissionNotes": "Se valida el permiso 'canDelete_Groups' desde los claims JWT. Además, se valida que el userId sea el owner del grupo O sea el SuperAdmin.",
+      "ownershipRules": [
+        "Solo el owner del grupo (CreatedByUserId) O el SuperAdmin (00000000-0000-0000-0000-000000000001) pueden desactivarlo",
+        "El userId del JWT debe coincidir con group.CreatedByUserId O ser SuperAdminId"
+      ],
+      "routeParams": [
+        {
+          "name": "groupId",
+          "type": "uuid",
+          "required": true,
+          "description": "ID del grupo a desactivar"
+        }
+      ],
+      "queryParams": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "required": true,
+          "description": "Bearer token JWT",
+          "example": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        }
+      ],
+      "cookies": [
+        {
+          "name": "jwt",
+          "required": false,
+          "description": "Token JWT alternativo si no se envía el header Authorization"
+        }
+      ],
+      "requestBodySchema": null,
+      "requestBodyExample": null,
+      "fieldsOptional": [],
+      "fieldsRequired": [],
+      "validationRules": [
+        "El grupo debe existir",
+        "El grupo debe estar activo (Status = Active)",
+        "El userId debe ser el owner del grupo O ser el SuperAdmin"
+      ],
+      "responses": [
+        {
+          "statusCode": 200,
+          "intOpCode": "SGRDL200",
+          "message": "Group deactivated successfully.",
+          "whenItHappens": "El grupo se desactivó exitosamente",
+          "responseBodyShape": {
+            "statusCode": 200,
+            "intOpCode": "SGRDL200",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 200,
+            "intOpCode": "SGRDL200",
+            "message": "Group deactivated successfully.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 401,
+          "intOpCode": "EGRAU401",
+          "message": "Invalid or missing user authentication.",
+          "whenItHappens": "El userId no pudo extraerse del JWT",
+          "responseBodyShape": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 401,
+            "intOpCode": "EGRAU401",
+            "message": "Invalid or missing user authentication.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 403,
+          "intOpCode": "EGRFB403",
+          "message": "Only the group owner can deactivate the group.",
+          "whenItHappens": "El usuario no tiene el permiso 'canDelete_Groups' O no es el owner del grupo ni el SuperAdmin",
+          "responseBodyShape": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 403,
+            "intOpCode": "EGRFB403",
+            "message": "Only the group owner can deactivate the group.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 404,
+          "intOpCode": "EGRNF404",
+          "message": "The specified group was not found.",
+          "whenItHappens": "El groupId no existe en la base de datos",
+          "responseBodyShape": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 404,
+            "intOpCode": "EGRNF404",
+            "message": "The specified group was not found.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 409,
+          "intOpCode": "EGRCF409",
+          "message": "The group is already inactive.",
+          "whenItHappens": "El grupo ya tiene Status = Inactive",
+          "responseBodyShape": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 409,
+            "intOpCode": "EGRCF409",
+            "message": "The group is already inactive.",
+            "data": []
+          }
+        },
+        {
+          "statusCode": 500,
+          "intOpCode": "EGRIN500",
+          "message": "An unexpected error occurred while deactivating the group.",
+          "whenItHappens": "Cualquier otro error no contemplado",
+          "responseBodyShape": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "string",
+            "data": "array (vacío)"
+          },
+          "responseExample": {
+            "statusCode": 500,
+            "intOpCode": "EGRIN500",
+            "message": "An unexpected error occurred while deactivating the group.",
+            "data": []
+          }
+        }
+      ],
+      "businessRules": [
+        "Solo el owner del grupo O el SuperAdmin pueden desactivarlo",
+        "SuperAdmin tiene bypass de ownership (no necesita ser owner)",
+        "No se puede desactivar un grupo ya inactivo",
+        "Es una desactivación lógica (Status = Inactive), no física",
+        "Los miembros del grupo NO se eliminan al desactivar"
+      ],
+      "dependencies": {
+        "repositories": [
+          "IGroupRepositorie.DeactivateGroupAsync"
+        ],
+        "services": [
+          "IAuthContextService.HasPermission",
+          "IAuthContextService.GetUserId"
+        ],
+        "helpers": [],
+        "entities": [
+          "Group"
+        ],
+        "claims": [
+          "NameIdentifier (userId)",
+          "permission: canDelete_Groups"
+        ]
+      },
+      "frontendNotes": [
+        "Usar en botones de 'Desactivar' o 'Archivar' grupo",
+        "Solo habilitar UI si el usuario actual es el owner O es SuperAdmin",
+        "Considerar confirmación antes de desactivar (modal de confirmación)",
+        "Después de desactivar, redirigir a lista de grupos o actualizar vista",
+        "Manejar error 409 si el grupo ya está inactivo (puede ocurrir con concurrencia)",
+        "El SuperAdmin puede desactivar cualquier grupo (validar en frontend si el usuario es SuperAdmin)",
+        "Los miembros del grupo NO se eliminan, solo cambia el status"
+      ],
+      "inferenceNotes": [
+        "Este es el único endpoint donde SuperAdmin tiene permisos especiales (bypass de ownership)"
+      ]
+    }
+  ],
+  "detectedInconsistencies": [
+    {
+      "severity": "medium",
+      "endpoint": "add-group",
+      "issue": "El repositorio devuelve Result<Guid> con el groupId creado, pero el controller no incluye este ID en la respuesta 201. El frontend no puede conocer el ID del grupo recién creado sin hacer otra consulta.",
+      "recommendation": "Considerar incluir el groupId en el campo 'data' de la respuesta 201."
+    },
+    {
+      "severity": "high",
+      "endpoint": "edit-group",
+      "issue": "No se valida unicidad del nombre al editar un grupo (solo se valida al crear). Esto podría permitir nombres duplicados.",
+      "recommendation": "Agregar validación de unicidad de nombre en EditGroupAsync similar a AddGroupAsync."
+    },
+    {
+      "severity": "low",
+      "endpoint": "get-group-by-id",
+      "issue": "Inconsistencia en naming conventions: GetCompleteGroupDto usa PascalCase (Id, Name, Description) mientras GroupDto usa camelCase (id, name, description).",
+      "recommendation": "Estandarizar las propiedades de los DTOs a una sola convención (preferiblemente camelCase para JSON)."
+    },
+    {
+      "severity": "medium",
+      "endpoint": "remove-member",
+      "issue": "El endpoint usa método HTTP DELETE pero espera body con JSON. Algunos proxies/gateways HTTP pueden rechazar DELETE con body. RESTful típico usaría DELETE a /groups/{groupId}/members/{userId} sin body.",
+      "recommendation": "Considerar cambiar a route params: DELETE /groups/{groupId}/members/{userId}"
+    },
+    {
+      "severity": "low",
+      "endpoint": "multiple",
+      "issue": "El mismo intOpCode 'SGRRD200' se usa para diferentes operaciones (GetGroups, GetGroupById, GetGroupMembers). Dificulta el tracking específico de operaciones en frontend.",
+      "recommendation": "Usar intOpCodes únicos por endpoint (ej: SGRGT200 para GetGroups, SGRGD200 para GetGroupById, SGRGM200 para GetGroupMembers)."
+    },
+    {
+      "severity": "low",
+      "endpoint": "add-member, edit-group",
+      "issue": "Los comentarios 'Corresponde a:' para AddMember y EditGroup apuntan a la misma URL del gateway pero con métodos HTTP diferentes. El comentario de AddMember debería especificar el método POST.",
+      "recommendation": "Clarificar en comentarios cuando múltiples endpoints internos mapean a la misma ruta del gateway con diferentes métodos HTTP."
+    },
+    {
+      "severity": "info",
+      "endpoint": "multiple",
+      "issue": "El campo 'data' siempre es un array, incluso cuando solo se devuelve un elemento (GetGroupById). Esto puede ser confuso para consumers de la API.",
+      "recommendation": "Considerar usar 'data' como objeto o array según el contexto, o documentar claramente esta convención."
+    },
+    {
+      "severity": "info",
+      "endpoint": "get-groups, get-group-by-id, get-group-members",
+      "issue": "Los endpoints de lectura no filtran por status del grupo. Esto significa que devuelven grupos tanto activos como inactivos. Puede ser intencional, pero debería estar documentado explícitamente en la API.",
+      "recommendation": "Considerar agregar query param opcional '?status=active' o documentar claramente que devuelve todos los status."
+    }
+  ]
+}
