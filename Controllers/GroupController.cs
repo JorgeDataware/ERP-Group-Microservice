@@ -1,4 +1,6 @@
-﻿using GroupsMicroservice.Models.Request;
+﻿using GroupsMicroservice.Models.Dto;
+using GroupsMicroservice.Models.Request;
+using GroupsMicroservice.Models.Response;
 using GroupsMicroservice.Repositories.IRepositories;
 using GroupsMicroservice.Services.IServices;
 using GroupsMicroservice.Utilities.Constants;
@@ -14,24 +16,59 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
     private readonly IGroupRepositorie _groupRepositorie = groupRepositorie;
     private readonly IAuthContextService _authContextService = authContextService;
 
-    private IActionResult UnauthorizedResponse(string message = "Invalid or missing user authentication.")
+    // Helper methods for standardized responses
+    private IActionResult StandardSuccess<T>(int statusCode, string intOpCode, string message, T[] data)
     {
-        return Unauthorized(new
+        var response = new StandardResponse<T>
         {
-            statusCode = 401,
-            error = "Unauthorized",
-            message
-        });
+            StatusCode = statusCode,
+            IntOpCode = intOpCode,
+            Message = message,
+            Data = data
+        };
+        return StatusCode(statusCode, response);
     }
 
-    private IActionResult ForbiddenResponse(string message = "You do not have permission to perform this action.")
+    private IActionResult StandardError(int statusCode, string intOpCode, string message)
     {
-        return StatusCode(StatusCodes.Status403Forbidden, new
+        var response = new StandardResponse<object>
         {
-            statusCode = 403,
-            error = "Forbidden",
-            message
-        });
+            StatusCode = statusCode,
+            IntOpCode = intOpCode,
+            Message = message,
+            Data = Array.Empty<object>()
+        };
+        return StatusCode(statusCode, response);
+    }
+
+    private IActionResult UnauthorizedResponse(string? message = null)
+    {
+        return StandardError(401, "EGRAU401", message ?? "Invalid or missing user authentication.");
+    }
+
+    private IActionResult ForbiddenResponse(string? message = null)
+    {
+        return StandardError(403, "EGRFB403", message ?? "You do not have permission to perform this action.");
+    }
+
+    private IActionResult NotFoundResponse(string message)
+    {
+        return StandardError(404, "EGRNF404", message);
+    }
+
+    private IActionResult ConflictResponse(string message)
+    {
+        return StandardError(409, "EGRCF409", message);
+    }
+
+    private IActionResult BadRequestResponse(string message)
+    {
+        return StandardError(400, "EGRBR400", message);
+    }
+
+    private IActionResult InternalServerErrorResponse(string message)
+    {
+        return StandardError(500, "EGRIN500", message);
     }
 
     [HttpPost("AddGroup")]
@@ -53,28 +90,13 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "UserNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                "GroupAlreadyExists" => Conflict(new
-                {
-                    statusCode = 409,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while adding the group."
-                })
+                "UserNotFound" => NotFoundResponse(result.error.Message),
+                "GroupAlreadyExists" => ConflictResponse(result.error.Message),
+                _ => InternalServerErrorResponse("An unexpected error occurred while adding the group.")
             };
         }
 
-        return NoContent();
+        return StandardSuccess(201, "SGRCR201", "Group created successfully.", Array.Empty<object>());
     }
 
     [HttpPost("AddMember")]
@@ -92,34 +114,14 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFoundOrInactive" => Conflict (new
-                {
-                    statusCode = 409,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                "UserNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                "MemberAlreadyExists" => Conflict(new
-                {
-                    statusCode = 409,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
+                "GroupNotFoundOrInactive" => ConflictResponse(result.error.Message),
+                "UserNotFound" => NotFoundResponse(result.error.Message),
+                "MemberAlreadyExists" => ConflictResponse(result.error.Message),
                 "OnlyOwnerCanAddMembers" => ForbiddenResponse("Only the group owner can add members to the group."),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while adding the member to the group."
-                })
+                _ => InternalServerErrorResponse("An unexpected error occurred while adding the member to the group.")
             };
         }
-        return NoContent();
+        return StandardSuccess(200, "SGRMB200", "Group member added successfully.", Array.Empty<object>());
     }
 
     [HttpGet("GetGroups")]
@@ -133,7 +135,8 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
 
         var groups = await _groupRepositorie.GetGroupsAsync();
 
-        return Ok(groups.Value);
+        var groupsArray = groups.Value?.ToArray() ?? Array.Empty<GroupDto>();
+        return StandardSuccess(200, "SGRRD200", "Groups retrieved successfully.", groupsArray);
     }
 
     [HttpPatch("EditGroup/{groupId}")]
@@ -154,28 +157,13 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                "UnactiveGroup" => Conflict(new
-                {
-                    statusCode = 409,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
+                "GroupNotFound" => NotFoundResponse(result.error.Message),
+                "UnactiveGroup" => ConflictResponse(result.error.Message),
                 "OnlyOwnerCanEditGroup" => ForbiddenResponse("Only the group owner can edit the group."),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while editing the group."
-                })
+                _ => InternalServerErrorResponse("An unexpected error occurred while editing the group.")
             };
         }
-        return NoContent();
+        return StandardSuccess(200, "SGRUP200", "Group updated successfully.", Array.Empty<object>());
     }
 
     [HttpGet("GetGroupById/{groupId}")]
@@ -190,21 +178,11 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while retrieving the group."
-                })
+                "GroupNotFound" => NotFoundResponse(result.error.Message),
+                _ => InternalServerErrorResponse("An unexpected error occurred while retrieving the group.")
             };
         }
-        return Ok(result.Value);
+        return StandardSuccess(200, "SGRRD200", "Group retrieved successfully.", new[] { result.Value });
     }
 
     [HttpGet("GetGroupMembers/{groupId}")]
@@ -221,22 +199,13 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return members.error.Code switch
             {
-                "GroupNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = members.error.Code,
-                    message = members.error.Message
-                }),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while retrieving the group members."
-                })
+                "GroupNotFound" => NotFoundResponse(members.error.Message),
+                _ => InternalServerErrorResponse("An unexpected error occurred while retrieving the group members.")
             };
         }
 
-        return Ok(members.Value);
+        var membersArray = members.Value?.ToArray() ?? Array.Empty<GroupMemberDto>();
+        return StandardSuccess(200, "SGRRD200", "Group members retrieved successfully.", membersArray);
     }
 
     [HttpDelete("RemoveMember")]
@@ -253,28 +222,13 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFoundOrInactive" => Conflict(new
-                {
-                    statusCode = 409,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                "MemberNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
+                "GroupNotFoundOrInactive" => ConflictResponse(result.error.Message),
+                "MemberNotFound" => NotFoundResponse(result.error.Message),
                 "OnlyOwnerCanRemoveMembers" => ForbiddenResponse("Only the group owner can remove members from the group."),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while removing the member from the group."
-                })
+                _ => InternalServerErrorResponse("An unexpected error occurred while removing the member from the group.")
             };
         }
-        return NoContent();
+        return StandardSuccess(200, "SGRMB200", "Group member removed successfully.", Array.Empty<object>());
     }
 
     [HttpPatch("{groupId}/deactivate")]
@@ -293,27 +247,12 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         {
             return result.error.Code switch
             {
-                "GroupNotFound" => NotFound(new
-                {
-                    statusCode = 404,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
+                "GroupNotFound" => NotFoundResponse(result.error.Message),
                 "OnlyOwnerCanDeactivateGroup" => ForbiddenResponse("Only the group owner can deactivate the group."),
-                "UnactiveGroup" => Conflict(new
-                {
-                    statusCode = 409,
-                    error = result.error.Code,
-                    message = result.error.Message
-                }),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    statusCode = 500,
-                    error = "InternalServerError",
-                    message = "An unexpected error occurred while deactivating the group."
-                })
+                "UnactiveGroup" => ConflictResponse(result.error.Message),
+                _ => InternalServerErrorResponse("An unexpected error occurred while deactivating the group.")
             };
         }
-        return NoContent();
+        return StandardSuccess(200, "SGRDL200", "Group deactivated successfully.", Array.Empty<object>());
     }
 }
