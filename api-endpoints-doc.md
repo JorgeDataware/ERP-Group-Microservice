@@ -1,74 +1,60 @@
-# Groups Microservice API - Documentación de Endpoints
+# GroupsMicroservice - Documentación de API
 
-## Resumen del Servicio
+## Información del Servicio
 
-**Nombre:** Groups Microservice
+**Nombre:** GroupsMicroservice
 
-**Descripción:** Microservicio para la gestión de grupos de trabajo. Permite crear grupos, administrar miembros, editar información de grupos y desactivar grupos. Implementa control de acceso basado en permisos JWT y reglas de propiedad (owner).
+**Descripción:** Microservicio para gestión de grupos y membresías. Permite crear, editar, desactivar grupos, así como agregar y eliminar miembros. Utiliza autenticación JWT con claims de permisos.
 
-**Tecnología:** .NET Core 8 + Entity Framework Core + Dapper + PostgreSQL
+**Rutas Internas Base:**
+- `/api/Group`
 
-**Autenticación:** JWT Bearer Token (header Authorization o cookie 'jwt')
-
-**Base Internal Routes:**
-- `api/Group`
-
-### Notas Importantes
-
-- Todos los endpoints devuelven un `StandardResponse` con estructura: `{ statusCode, intOpCode, message, data[] }`
-- El campo `data` siempre es un array, incluso si está vacío
-- La autenticación se puede enviar por header `Authorization` (Bearer token) o cookie `jwt`
-- Los permisos se validan desde los claims del JWT con tipo `permission`
-- El `userId` se extrae del claim `NameIdentifier` del JWT
-- Las reglas de ownership se validan contra el campo `CreatedByUserId` del grupo
-- SuperAdmin (`00000000-0000-0000-0000-000000000001`) tiene permisos especiales en algunos endpoints
+**Notas Importantes:**
+- Todos los endpoints devuelven el formato `StandardResponse<T>` con `statusCode`, `intOpCode`, `message` y `data` (siempre array)
+- La autenticación se realiza mediante JWT bearer token o cookie 'jwt'
+- Los permisos se validan desde claims del JWT con type 'permission'
+- El userId se obtiene del claim NameIdentifier del JWT
+- Solo el owner del grupo puede agregar/editar/eliminar miembros (excepto SuperAdmin para deactivate)
+- Los grupos con Status.Inactive no permiten operaciones de modificación
+- SuperAdminId especial: `00000000-0000-0000-0000-000000000001`
 
 ---
 
 ## Enums Globales
 
 ### Status
+Estado de las entidades (grupos y usuarios)
 
-Estado de entidades (Group, User)
-
-| Nombre | Valor | Descripción |
-|--------|-------|-------------|
-| Active | 1 | Entidad activa y operativa |
-| Inactive | 2 | Entidad desactivada |
+| Valor | Numérico | Descripción |
+|-------|----------|-------------|
+| Active | 1 | Entidad activa |
+| Inactive | 2 | Entidad inactiva |
 
 ---
 
 ## Permisos Globales
 
-| Nombre | Descripción | Constante |
-|--------|-------------|-----------|
-| canCreate_Groups | Permite crear nuevos grupos | GroupPermissions.CanCreate |
-| canRead_Groups | Permite leer grupos y sus miembros | GroupPermissions.CanRead |
-| canUpdate_Groups | Permite editar grupos, agregar y remover miembros | GroupPermissions.CanUpdate |
-| canDelete_Groups | Permite desactivar grupos | GroupPermissions.CanDelete |
-
----
-
-## Constantes Globales
-
-| Nombre | Valor | Descripción |
-|--------|-------|-------------|
-| SuperAdminId | 00000000-0000-0000-0000-000000000001 | UUID del super administrador del sistema. Tiene permisos especiales para desactivar grupos sin ser owner |
+| Permiso | Constante | Descripción |
+|---------|-----------|-------------|
+| `canCreate_Groups` | GroupPermissions.CanCreate | Permite crear nuevos grupos. Requerido en: AddGroup |
+| `canRead_Groups` | GroupPermissions.CanRead | Permite leer/consultar grupos y miembros. Requerido en: GetGroups, GetGroupById, GetGroupMembers |
+| `canUpdate_Groups` | GroupPermissions.CanUpdate | Permite actualizar grupos y gestionar miembros. Requerido en: AddMember, EditGroup, RemoveMember |
+| `canDelete_Groups` | GroupPermissions.CanDelete | Permite desactivar grupos. Requerido en: DeactivateGroup |
 
 ---
 
 ## Tabla Resumen de Endpoints
 
 | Method | Gateway Endpoint | Internal Endpoint | Auth | Permissions | Summary |
-|--------|------------------|-------------------|------|-------------|---------|
-| POST | https://mi-gateway.onrender.com/groups/ | api/Group/AddGroup | Bearer | canCreate_Groups | Crear un nuevo grupo |
-| POST | https://mi-gateway.onrender.com/groups/members | api/Group/AddMember | Bearer | canUpdate_Groups | Agregar un miembro a un grupo |
-| GET | https://mi-gateway.onrender.com/groups/ | api/Group/GetGroups | Bearer | canRead_Groups | Obtener todos los grupos |
-| PATCH | https://mi-gateway.onrender.com/groups/{groupId} | api/Group/EditGroup/{groupId} | Bearer | canUpdate_Groups | Editar información de un grupo |
-| GET | https://mi-gateway.onrender.com/groups/{groupId} | api/Group/GetGroupById/{groupId} | Bearer | canRead_Groups | Obtener detalle completo de un grupo |
-| GET | https://mi-gateway.onrender.com/groups/{groupId}/members | api/Group/GetGroupMembers/{groupId} | Bearer | canRead_Groups | Obtener miembros de un grupo |
-| DELETE | https://mi-gateway.onrender.com/groups/{groupId}/members | api/Group/RemoveMember | Bearer | canUpdate_Groups | Remover un miembro de un grupo |
-| PATCH | https://mi-gateway.onrender.com/groups/{groupId}/deactivate | api/Group/{groupId}/deactivate | Bearer | canDelete_Groups | Desactivar un grupo |
+|--------|-----------------|-------------------|------|-------------|---------|
+| POST | `/groups/` | `/api/Group/AddGroup` | ✓ | canCreate_Groups | Crear un nuevo grupo |
+| POST | `/groups/members` | `/api/Group/AddMember` | ✓ | canUpdate_Groups | Agregar un miembro a un grupo |
+| GET | `/groups/` | `/api/Group/GetGroups` | ✓ | canRead_Groups | Obtener lista de todos los grupos |
+| PATCH | `/groups/{groupId}` | `/api/Group/EditGroup/{groupId}` | ✓ | canUpdate_Groups | Editar nombre y descripción de un grupo |
+| GET | `/groups/{groupId}` | `/api/Group/GetGroupById/{groupId}` | ✓ | canRead_Groups | Obtener detalles completos de un grupo |
+| GET | `/groups/{groupId}/members` | `/api/Group/GetGroupMembers/{groupId}` | ✓ | canRead_Groups | Obtener lista de miembros de un grupo |
+| DELETE | `/groups/{groupId}/members` | `/api/Group/RemoveMember` | ✓ | canUpdate_Groups | Eliminar un miembro de un grupo |
+| PATCH | `/groups/{groupId}/deactivate` | `/api/Group/{groupId}/deactivate` | ✓ | canDelete_Groups | Desactivar un grupo |
 
 ---
 
@@ -76,63 +62,41 @@ Estado de entidades (Group, User)
 
 ### 1. POST - Crear un nuevo grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/`  
+**Endpoint Interno:** `POST /api/Group/AddGroup`
 
-**Internal Endpoint:** `api/Group/AddGroup`
+Permite a un usuario autenticado con permiso de creación crear un nuevo grupo del cual será el owner.
 
-**Archivo fuente:** `Controllers/GroupController.cs:75`
-
-#### Descripción
-
-Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticamente en el propietario (owner) del grupo. Valida que no exista un grupo con el mismo nombre y que el usuario exista en la base de datos.
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canCreate_Groups`
-- **Reglas de ownership:** El usuario autenticado se establece como CreatedByUserId (owner) del grupo
+- **Reglas de ownership:**
+  - El usuario autenticado se convierte automáticamente en owner del grupo (CreatedByUserId)
+  - No se requiere ser owner de nada previo, solo tener el permiso
 
 #### Request
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
+- `Authorization` (requerido): Bearer token con JWT válido
   - Ejemplo: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
-- `Content-Type` (requerido): `application/json`
 
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo si no se envía el header Authorization
+**Cookies (alternativo):**
+- `jwt`: Token JWT si no se envía header Authorization
 
-**Body Schema:**
-
+**Body:**
 ```json
 {
-  "name": "string (requerido)",
-  "description": "string (requerido)"
+  "Name": "Equipo de Desarrollo",
+  "Description": "Grupo para desarrolladores del proyecto X"
 }
 ```
 
-**Body Example:**
-
-```json
-{
-  "name": "Equipo de Desarrollo",
-  "description": "Grupo para el equipo de desarrollo de software"
-}
-```
-
-#### Validaciones
-
-- `name` debe ser único (no puede existir otro grupo con ese nombre)
-- El usuario debe existir en la tabla 'user'
+**Campos requeridos:** Name, Description
 
 #### Responses
 
 ##### 201 - SGRCR201
-
-**Cuándo ocurre:** El grupo se creó exitosamente
-
-**Respuesta:**
+**Cuándo ocurre:** Cuando el grupo se crea exitosamente
 
 ```json
 {
@@ -144,10 +108,7 @@ Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticam
 ```
 
 ##### 401 - EGRAU401
-
-**Cuándo ocurre:** El userId no pudo extraerse del JWT (claim NameIdentifier inválido o faltante)
-
-**Respuesta:**
+**Cuándo ocurre:** Cuando no se puede obtener el userId del JWT (claim NameIdentifier inválido o ausente)
 
 ```json
 {
@@ -159,10 +120,7 @@ Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticam
 ```
 
 ##### 403 - EGRFB403
-
-**Cuándo ocurre:** El usuario no tiene el permiso 'canCreate_Groups' en sus claims JWT
-
-**Respuesta:**
+**Cuándo ocurre:** Cuando el usuario autenticado no tiene el permiso 'canCreate_Groups' en sus claims
 
 ```json
 {
@@ -174,10 +132,7 @@ Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticam
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El userId extraído del JWT no existe en la tabla 'user'
-
-**Respuesta:**
+**Cuándo ocurre:** Cuando el userId del JWT no existe en la tabla 'user'
 
 ```json
 {
@@ -189,10 +144,7 @@ Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticam
 ```
 
 ##### 409 - EGRCF409
-
-**Cuándo ocurre:** Ya existe un grupo con el mismo 'name'
-
-**Respuesta:**
+**Cuándo ocurre:** Cuando ya existe un grupo con el mismo Name
 
 ```json
 {
@@ -204,10 +156,7 @@ Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticam
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado (catch-all en switch default)
-
-**Respuesta:**
+**Cuándo ocurre:** Cuando ocurre un error inesperado no catalogado
 
 ```json
 {
@@ -219,88 +168,67 @@ Crea un nuevo grupo de trabajo. El usuario autenticado se convierte automáticam
 ```
 
 #### Lógica de Negocio
-
-- El nombre del grupo debe ser único en toda la base de datos
-- El usuario que crea el grupo se convierte automáticamente en owner (CreatedByUserId)
-- El grupo se crea con Status = Active por defecto
-- El usuario debe existir en la tabla 'user' antes de poder crear un grupo
+- El nombre del grupo debe ser único en todo el sistema
+- El usuario que crea el grupo se convierte automáticamente en el owner (CreatedByUserId)
+- El grupo se crea con Status.Active por defecto
+- El userId del JWT debe corresponder a un usuario existente en la base de datos
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.AddGroupAsync
 - **Servicios:** IAuthContextService.HasPermission, IAuthContextService.GetUserId
-- **Helpers:** AutoMapper
-- **Entidades:** Group, User
-- **Claims:** NameIdentifier (userId), permission: canCreate_Groups
+- **Helpers:** AutoMapper (para mapear AddGroupRequest a Group entity)
+- **Entidades:** Group (tabla: group), User (tabla: user)
+- **Claims JWT:** NameIdentifier (userId), permission (permisos)
 
 #### Notas para Frontend
-
-- Este endpoint NO devuelve el ID del grupo creado en la respuesta actual, solo confirma creación
-- Si necesitas el groupId después de crear, debes llamar a GetGroups o buscar por nombre
-- Ideal para formularios de creación de grupos
-- Muestra mensaje de error específico al usuario si el nombre ya existe (409)
-- El backend valida permisos, pero el frontend debería ocultar/deshabilitar UI si el usuario no tiene canCreate_Groups
+- El endpoint NO retorna el ID del grupo creado en data (está vacío), pero el repositorio sí lo retorna internamente
+- Validar que Name y Description no estén vacíos antes de enviar
+- Mostrar mensaje específico si el nombre ya existe (409)
+- Después de crear exitosamente, refrescar la lista de grupos
+- El usuario que crea el grupo puede gestionarlo sin restricciones (es el owner)
 
 ---
 
 ### 2. POST - Agregar un miembro a un grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/members`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/members`  
+**Endpoint Interno:** `POST /api/Group/AddMember`
 
-**Internal Endpoint:** `api/Group/AddMember`
+Permite al owner de un grupo agregar un nuevo miembro. Requiere que el grupo esté activo y que el usuario a agregar exista.
 
-**Archivo fuente:** `Controllers/GroupController.cs:104`
-
-#### Descripción
-
-Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner/creador) del grupo puede agregar miembros. El grupo debe estar activo (Status = Active).
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canUpdate_Groups`
-- **Reglas de ownership:** Solo el owner del grupo (CreatedByUserId) puede agregar miembros. El requesterId debe coincidir con group.CreatedByUserId
+- **Reglas de ownership:**
+  - Solo el owner del grupo (CreatedByUserId) puede agregar miembros
+  - Si el requesterId != owner, retorna 403 con mensaje específico
+  - SuperAdmin NO tiene privilegios especiales para este endpoint
 
 #### Request
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
-- `Content-Type` (requerido): `application/json`
+- `Authorization` (requerido): Bearer token con JWT válido
 
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
-
-**Body Schema:**
-
+**Body:**
 ```json
 {
-  "groupId": "uuid (requerido)",
-  "userId": "uuid (requerido)"
+  "GroupId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "memberId": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 }
 ```
 
-**Body Example:**
+**Campos requeridos:** GroupId, memberId
 
-```json
-{
-  "groupId": "550e8400-e29b-41d4-a716-446655440000",
-  "userId": "660e8400-e29b-41d4-a716-446655440001"
-}
-```
-
-#### Validaciones
-
-- El grupo debe existir y estar activo (Status = Active)
-- El usuario a agregar debe existir en la tabla 'user'
-- El usuario no debe ser miembro del grupo ya
-- El requesterId debe ser el owner del grupo
+**Validaciones:**
+- GroupId debe existir y tener Status.Active
+- memberId debe corresponder a un usuario existente
+- El miembro no debe estar ya en el grupo (validación de duplicado)
+- El requesterId (del JWT) debe ser el owner del grupo
 
 #### Responses
 
 ##### 200 - SGRMB200
-
-**Cuándo ocurre:** El miembro se agregó exitosamente al grupo
+**Cuándo ocurre:** Cuando el miembro se agrega exitosamente al grupo
 
 ```json
 {
@@ -312,8 +240,7 @@ Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner
 ```
 
 ##### 401 - EGRAU401
-
-**Cuándo ocurre:** El userId no pudo extraerse del JWT
+**Cuándo ocurre:** Cuando no se puede obtener el userId del JWT
 
 ```json
 {
@@ -324,9 +251,20 @@ Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner
 }
 ```
 
-##### 403 - EGRFB403
+##### 403 - EGRFB403 (Sin permiso)
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canUpdate_Groups'
 
-**Cuándo ocurre:** El usuario no tiene el permiso 'canUpdate_Groups' O no es el owner del grupo
+```json
+{
+  "statusCode": 403,
+  "intOpCode": "EGRFB403",
+  "message": "You do not have permission to perform this action.",
+  "data": []
+}
+```
+
+##### 403 - EGRFB403 (No es owner)
+**Cuándo ocurre:** Cuando el requesterId no es el owner del grupo
 
 ```json
 {
@@ -338,8 +276,7 @@ Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El userId a agregar no existe en la tabla 'user'
+**Cuándo ocurre:** Cuando el memberId no corresponde a un usuario existente
 
 ```json
 {
@@ -350,11 +287,20 @@ Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner
 }
 ```
 
-##### 409 - EGRCF409
+##### 409 - EGRCF409 (Grupo inactivo)
+**Cuándo ocurre:** Cuando el grupo no existe o su Status != Active
 
-**Cuándo ocurre:** El grupo no existe o está inactivo, O el miembro ya existe en el grupo
+```json
+{
+  "statusCode": 409,
+  "intOpCode": "EGRCF409",
+  "message": "The specified group was not found or is inactive.",
+  "data": []
+}
+```
 
-**Nota:** El mensaje puede variar: "The specified group was not found or is inactive." o "The specified member is already part of the group."
+##### 409 - EGRCF409 (Miembro duplicado)
+**Cuándo ocurre:** Cuando el memberId ya está en la tabla group_members para ese GroupId
 
 ```json
 {
@@ -366,8 +312,7 @@ Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado
+**Cuándo ocurre:** Error inesperado no catalogado
 
 ```json
 {
@@ -379,68 +324,50 @@ Agrega un usuario como miembro de un grupo existente. Solo el propietario (owner
 ```
 
 #### Lógica de Negocio
-
 - Solo el owner del grupo puede agregar miembros
-- El grupo debe estar en estado Active
+- El grupo debe estar activo (Status.Active)
 - El usuario a agregar debe existir en la base de datos
-- No se puede agregar un usuario que ya es miembro del grupo
-- Se crea un nuevo registro en la tabla 'group_members' con un nuevo Guid
+- No se puede agregar un miembro duplicado
+- Se crea un registro en group_members con un nuevo Guid como Id
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.AddMemberAsync
 - **Servicios:** IAuthContextService.HasPermission, IAuthContextService.GetUserId
-- **Entidades:** Group, User, GroupMembers
-- **Claims:** NameIdentifier (userId), permission: canUpdate_Groups
+- **Entidades:** Group (tabla: group), User (tabla: user), GroupMembers (tabla: group_members)
+- **Claims JWT:** NameIdentifier (requesterId), permission
 
 #### Notas para Frontend
-
-- Este endpoint requiere tanto permiso general como ownership
-- Ideal para componentes de gestión de miembros de grupo
-- Debe permitir al frontend seleccionar usuarios de una lista para agregarlos
-- Mostrar error claro si el usuario ya es miembro (409)
-- Mostrar error si el grupo está inactivo (409)
-- Después de agregar, conviene refrescar la lista de miembros del grupo
-- Solo habilitar UI si el usuario actual es el owner del grupo
+- Validar que ambos GUIDs sean válidos antes de enviar
+- Mostrar mensaje específico para cada tipo de error (409 puede ser por grupo inactivo O miembro duplicado)
+- Después de agregar exitosamente, refrescar la lista de miembros del grupo
+- Solo mostrar opción de agregar miembros si el usuario actual es el owner del grupo
+- Considerar deshabilitar el botón si el grupo está inactivo
 
 ---
 
-### 3. GET - Obtener todos los grupos
+### 3. GET - Obtener lista de todos los grupos
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/`  
+**Endpoint Interno:** `GET /api/Group/GetGroups`
 
-**Internal Endpoint:** `api/Group/GetGroups`
+Retorna todos los grupos del sistema (activos e inactivos) con información básica del owner.
 
-**Archivo fuente:** `Controllers/GroupController.cs:130`
-
-#### Descripción
-
-Obtiene una lista completa de todos los grupos registrados en el sistema, incluyendo información básica y el nombre del propietario. No hay paginación implementada.
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canRead_Groups`
-- **Reglas de ownership:** No aplica - listado general para usuarios con permiso de lectura
+- **Reglas de ownership:** No aplica. Cualquier usuario con el permiso puede ver todos los grupos.
 
 #### Request
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
+- `Authorization` (requerido): Bearer token con JWT válido
 
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
-
-**Body:** No requiere body
+**Sin parámetros de ruta, query ni body**
 
 #### Responses
 
 ##### 200 - SGRRD200
-
-**Cuándo ocurre:** La consulta se ejecutó exitosamente (puede devolver array vacío si no hay grupos)
-
-**Nota:** `owner` es el nombre completo concatenado del usuario (FirstName + MiddleName + LastName). `status` es numérico: 1 = Active, 2 = Inactive
+**Cuándo ocurre:** Siempre que la consulta se ejecute exitosamente (incluso si no hay grupos)
 
 ```json
 {
@@ -449,26 +376,25 @@ Obtiene una lista completa de todos los grupos registrados en el sistema, incluy
   "message": "Groups retrieved successfully.",
   "data": [
     {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "name": "Equipo de Desarrollo",
-      "description": "Grupo para el equipo de desarrollo de software",
-      "owner": "Juan Carlos Pérez",
+      "description": "Grupo para desarrolladores del proyecto X",
+      "owner": "Juan Alberto Pérez",
       "status": 1
     },
     {
-      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
       "name": "Equipo de QA",
-      "description": "Grupo de aseguramiento de calidad",
-      "owner": "María González López",
-      "status": 1
+      "description": "Grupo de Quality Assurance",
+      "owner": "María López García",
+      "status": 2
     }
   ]
 }
 ```
 
 ##### 403 - EGRFB403
-
-**Cuándo ocurre:** El usuario no tiene el permiso 'canRead_Groups' en sus claims JWT
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canRead_Groups'
 
 ```json
 {
@@ -480,92 +406,70 @@ Obtiene una lista completa de todos los grupos registrados en el sistema, incluy
 ```
 
 #### Lógica de Negocio
-
-- Devuelve TODOS los grupos sin filtrar por status (incluye Active e Inactive)
+- Retorna TODOS los grupos sin filtrar por status
+- El campo 'owner' se construye concatenando first_name, middle_name (si existe) y last_name del usuario
 - No hay paginación implementada
-- El owner se calcula con CONCAT_WS concatenando FirstName, MiddleName (si existe) y LastName
-- Usa Dapper para consulta SQL directa (no Entity Framework)
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.GetGroupsAsync
 - **Servicios:** IAuthContextService.HasPermission
-- **Helpers:** Dapper
-- **Entidades:** Group, User
-- **Claims:** permission: canRead_Groups
+- **Helpers:** Dapper para ejecutar SQL raw
+- **Entidades:** Group (tabla: group), User (tabla: user)
+- **Claims JWT:** permission
 
 #### Notas para Frontend
-
-- Ideal para poblar tablas/listas de grupos
-- No hay paginación, considerar agregar paginación en frontend si la lista crece mucho
-- El campo `status` es numérico (1 = Active, 2 = Inactive), convertir a texto legible en UI
-- El campo `owner` ya viene como texto listo para mostrar
-- Guardar el `id` de cada grupo para operaciones posteriores (editar, ver detalle, etc.)
-- Puede devolver array vacío si no hay grupos, manejar UI para lista vacía
-- NO devuelve información de miembros, solo datos básicos del grupo
+- Perfecto para listar grupos en una tabla o lista
+- El campo 'status' es numérico (1 = Active, 2 = Inactive)
+- Mostrar indicador visual diferente para grupos inactivos
+- Si data está vacío, mostrar mensaje de 'No hay grupos creados'
+- El campo 'owner' ya viene formateado como nombre completo
+- NO hay paginación, considerar implementarla en frontend si hay muchos grupos
 
 ---
 
-### 4. PATCH - Editar información de un grupo
+### 4. PATCH - Editar nombre y descripción de un grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}`  
+**Endpoint Interno:** `PATCH /api/Group/EditGroup/{groupId}`
 
-**Internal Endpoint:** `api/Group/EditGroup/{groupId}`
+Permite al owner de un grupo editar su nombre y descripción. El grupo debe estar activo.
 
-**Archivo fuente:** `Controllers/GroupController.cs:146`
-
-#### Descripción
-
-Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario (owner/creador) del grupo puede editarlo. El grupo debe estar activo (Status = Active).
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canUpdate_Groups`
-- **Reglas de ownership:** Solo el owner del grupo (CreatedByUserId) puede editarlo. El userId del JWT debe coincidir con group.CreatedByUserId
+- **Reglas de ownership:**
+  - Solo el owner del grupo (CreatedByUserId) puede editarlo
+  - Si requesterId != owner, retorna 403
+  - SuperAdmin NO tiene privilegios especiales para este endpoint
 
 #### Request
 
-**Route Params:**
-- `groupId` (uuid, requerido): ID del grupo a editar
+**Parámetros de ruta:**
+- `groupId` (requerido, UUID): ID del grupo a editar
+  - Ejemplo: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
-- `Content-Type` (requerido): `application/json`
+- `Authorization` (requerido): Bearer token con JWT válido
 
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
-
-**Body Schema:**
-
+**Body:**
 ```json
 {
-  "name": "string (requerido)",
-  "description": "string (requerido)"
+  "Name": "Equipo de Desarrollo Backend",
+  "Description": "Grupo actualizado para desarrolladores backend"
 }
 ```
 
-**Body Example:**
+**Campos requeridos:** Name, Description
 
-```json
-{
-  "name": "Equipo de Desarrollo Frontend",
-  "description": "Grupo especializado en desarrollo de interfaces de usuario"
-}
-```
-
-#### Validaciones
-
-- El grupo debe existir
-- El grupo debe estar activo (Status = Active)
-- El userId debe ser el owner del grupo (CreatedByUserId)
+**Validaciones:**
+- El groupId debe existir en la tabla group
+- El grupo debe tener Status.Active (no se puede editar un grupo inactivo)
+- El requesterId (del JWT) debe ser el owner del grupo
 
 #### Responses
 
 ##### 200 - SGRUP200
-
-**Cuándo ocurre:** El grupo se actualizó exitosamente
+**Cuándo ocurre:** Cuando el grupo se actualiza exitosamente
 
 ```json
 {
@@ -577,8 +481,7 @@ Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario 
 ```
 
 ##### 401 - EGRAU401
-
-**Cuándo ocurre:** El userId no pudo extraerse del JWT
+**Cuándo ocurre:** Cuando no se puede obtener el userId del JWT
 
 ```json
 {
@@ -589,9 +492,20 @@ Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario 
 }
 ```
 
-##### 403 - EGRFB403
+##### 403 - EGRFB403 (Sin permiso)
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canUpdate_Groups'
 
-**Cuándo ocurre:** El usuario no tiene el permiso 'canUpdate_Groups' O no es el owner del grupo
+```json
+{
+  "statusCode": 403,
+  "intOpCode": "EGRFB403",
+  "message": "You do not have permission to perform this action.",
+  "data": []
+}
+```
+
+##### 403 - EGRFB403 (No es owner)
+**Cuándo ocurre:** Cuando el requesterId no es el owner del grupo
 
 ```json
 {
@@ -603,8 +517,7 @@ Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario 
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El groupId no existe en la base de datos
+**Cuándo ocurre:** Cuando el groupId no existe en la base de datos
 
 ```json
 {
@@ -616,8 +529,7 @@ Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario 
 ```
 
 ##### 409 - EGRCF409
-
-**Cuándo ocurre:** El grupo tiene Status = Inactive
+**Cuándo ocurre:** Cuando el grupo tiene Status.Inactive
 
 ```json
 {
@@ -629,8 +541,7 @@ Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario 
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado
+**Cuándo ocurre:** Error inesperado no catalogado
 
 ```json
 {
@@ -642,74 +553,52 @@ Actualiza el nombre y/o descripción de un grupo existente. Solo el propietario 
 ```
 
 #### Lógica de Negocio
-
 - Solo el owner del grupo puede editarlo
 - No se puede editar un grupo inactivo
-- Se actualizan ambos campos (name y description) mediante AutoMapper
-- ⚠️ **No se valida unicidad de nombre** (puede generar conflictos si se intenta usar nombre duplicado)
+- Se usa AutoMapper para mapear EditGroupRequest a la entidad Group existente
+- El orden de validación es: existencia → ownership → status
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.EditGroupAsync
 - **Servicios:** IAuthContextService.HasPermission, IAuthContextService.GetUserId
 - **Helpers:** AutoMapper
-- **Entidades:** Group
-- **Claims:** NameIdentifier (userId), permission: canUpdate_Groups
+- **Entidades:** Group (tabla: group)
+- **Claims JWT:** NameIdentifier, permission
 
 #### Notas para Frontend
-
-- Usar en formularios de edición de grupos
-- Validar en frontend que el usuario actual es el owner antes de mostrar UI de edición
-- El groupId debe venir de la URL o contexto previo (ej: desde tabla de grupos)
-- Después de editar, refrescar vista de detalle del grupo o lista de grupos
-- Manejar 409 mostrando mensaje que no se puede editar grupo inactivo
-- ⚠️ Considerar que NO se valida unicidad de nombre en el backend (puede causar problemas)
+- Solo mostrar opción de editar si el usuario actual es el owner
+- Deshabilitar edición si el grupo está inactivo
+- Mostrar mensaje claro si se intenta editar un grupo inactivo (409)
+- Después de editar exitosamente, refrescar vista del grupo
+- El endpoint no valida unicidad de nombre al editar (inferido, no explícito en código)
 
 ---
 
-### 5. GET - Obtener detalle completo de un grupo
+### 5. GET - Obtener detalles completos de un grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}`  
+**Endpoint Interno:** `GET /api/Group/GetGroupById/{groupId}`
 
-**Internal Endpoint:** `api/Group/GetGroupById/{groupId}`
+Retorna información detallada de un grupo incluyendo sus miembros.
 
-**Archivo fuente:** `Controllers/GroupController.cs:174`
-
-#### Descripción
-
-Obtiene información detallada de un grupo específico, incluyendo datos básicos del grupo, información del propietario, y lista completa de miembros con sus datos personales.
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canRead_Groups`
-- **Reglas de ownership:** No aplica - cualquier usuario con permiso de lectura puede ver detalles de cualquier grupo
+- **Reglas de ownership:** No aplica. Cualquier usuario con el permiso puede ver cualquier grupo.
 
 #### Request
 
-**Route Params:**
-- `groupId` (uuid, requerido): ID del grupo a consultar
+**Parámetros de ruta:**
+- `groupId` (requerido, UUID): ID del grupo a consultar
+  - Ejemplo: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
-
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
-
-**Body:** No requiere body
-
-#### Validaciones
-
-- El grupo debe existir
+- `Authorization` (requerido): Bearer token con JWT válido
 
 #### Responses
 
 ##### 200 - SGRRD200
-
-**Cuándo ocurre:** El grupo existe y se recuperó exitosamente con sus miembros
-
-**Nota:** `data` es un array con un solo elemento. `status` es numérico (1=Active, 2=Inactive). `members` puede ser array vacío si no hay miembros.
+**Cuándo ocurre:** Cuando el grupo existe
 
 ```json
 {
@@ -718,22 +607,22 @@ Obtiene información detallada de un grupo específico, incluyendo datos básico
   "message": "Group retrieved successfully.",
   "data": [
     {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Equipo de Desarrollo",
-      "description": "Grupo para el equipo de desarrollo de software",
-      "createdByUserId": "770e8400-e29b-41d4-a716-446655440002",
-      "owner": "Juan Carlos Pérez",
-      "status": 1,
-      "members": [
+      "Id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "Name": "Equipo de Desarrollo",
+      "Description": "Grupo para desarrolladores del proyecto X",
+      "CreatedByUserId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "Owner": "Juan Alberto Pérez",
+      "Status": 1,
+      "Members": [
         {
-          "id": "880e8400-e29b-41d4-a716-446655440003",
-          "userName": "jperez",
-          "completeName": "Juan Carlos Pérez"
+          "Id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+          "UserName": "jperez",
+          "CompleteName": "Juan Pérez García"
         },
         {
-          "id": "990e8400-e29b-41d4-a716-446655440004",
-          "userName": "mgonzalez",
-          "completeName": "María González López"
+          "Id": "d4e5f6a7-b8c9-0123-def1-234567890123",
+          "UserName": "mlopez",
+          "CompleteName": "María López"
         }
       ]
     }
@@ -742,8 +631,7 @@ Obtiene información detallada de un grupo específico, incluyendo datos básico
 ```
 
 ##### 403 - EGRFB403
-
-**Cuándo ocurre:** El usuario no tiene el permiso 'canRead_Groups' en sus claims JWT
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canRead_Groups'
 
 ```json
 {
@@ -755,8 +643,7 @@ Obtiene información detallada de un grupo específico, incluyendo datos básico
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El groupId no existe en la base de datos
+**Cuándo ocurre:** Cuando el groupId no existe
 
 ```json
 {
@@ -768,8 +655,7 @@ Obtiene información detallada de un grupo específico, incluyendo datos básico
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado
+**Cuándo ocurre:** Error inesperado no catalogado
 
 ```json
 {
@@ -781,74 +667,54 @@ Obtiene información detallada de un grupo específico, incluyendo datos básico
 ```
 
 #### Lógica de Negocio
-
-- Devuelve información completa del grupo incluyendo lista de miembros
-- No filtra por status del grupo (devuelve tanto Active como Inactive)
-- Usa Dapper con dos queries SQL separadas (una para grupo, otra para miembros)
-- El owner se calcula concatenando FirstName, MiddleName y LastName
-- completeName de miembros también se calcula con CONCAT_WS
+- Retorna el grupo con todos sus miembros en una sola consulta
+- No filtra por status, puede retornar grupos inactivos
+- Los miembros se obtienen de la tabla group_members con join a user
+- El campo Owner se construye concatenando nombres del creator
+- Si el grupo no tiene miembros, Members es un array vacío
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.GetGroupByIdAsync
 - **Servicios:** IAuthContextService.HasPermission
-- **Helpers:** Dapper
-- **Entidades:** Group, User, GroupMembers
-- **Claims:** permission: canRead_Groups
+- **Helpers:** Dapper para ejecutar SQL raw
+- **Entidades:** Group (tabla: group), User (tabla: user), GroupMembers (tabla: group_members)
+- **Claims JWT:** permission
 
 #### Notas para Frontend
-
-- Ideal para modales de detalle o páginas de vista de grupo
-- Devuelve toda la información necesaria en una sola llamada (grupo + miembros)
-- El array `data` tiene un solo elemento, acceder como `data[0]`
-- `members` puede ser array vacío, manejar UI apropiadamente
-- `createdByUserId` es útil para determinar si el usuario actual es owner y mostrar/ocultar botones de edición/eliminación
-- `status` numérico (1=Active, 2=Inactive), convertir a texto en UI
-- `userName` y `completeName` de miembros listos para mostrar
+- Perfecto para modal de detalle o vista individual del grupo
+- El resultado viene en data[0] (array con un solo elemento)
+- Members puede estar vacío si el grupo no tiene miembros
+- CreatedByUserId es útil para determinar si el usuario actual es el owner
+- Status numérico: 1 = Active, 2 = Inactive
+- CompleteName de miembros ya viene formateado
 
 ---
 
-### 6. GET - Obtener miembros de un grupo
+### 6. GET - Obtener lista de miembros de un grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}/members`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}/members`  
+**Endpoint Interno:** `GET /api/Group/GetGroupMembers/{groupId}`
 
-**Internal Endpoint:** `api/Group/GetGroupMembers/{groupId}`
+Retorna la lista de miembros de un grupo específico.
 
-**Archivo fuente:** `Controllers/GroupController.cs:194`
-
-#### Descripción
-
-Obtiene la lista completa de miembros de un grupo específico, incluyendo ID, username y nombre completo de cada miembro.
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canRead_Groups`
-- **Reglas de ownership:** No aplica - cualquier usuario con permiso de lectura puede ver miembros de cualquier grupo
+- **Reglas de ownership:** No aplica. Cualquier usuario con el permiso puede ver miembros de cualquier grupo.
 
 #### Request
 
-**Route Params:**
-- `groupId` (uuid, requerido): ID del grupo del cual obtener los miembros
+**Parámetros de ruta:**
+- `groupId` (requerido, UUID): ID del grupo
+  - Ejemplo: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
-
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
-
-**Body:** No requiere body
-
-#### Validaciones
-
-- El grupo debe existir
+- `Authorization` (requerido): Bearer token con JWT válido
 
 #### Responses
 
 ##### 200 - SGRRD200
-
-**Cuándo ocurre:** La consulta se ejecutó exitosamente (puede devolver array vacío si no hay miembros)
+**Cuándo ocurre:** Cuando el grupo existe (incluso si no tiene miembros)
 
 ```json
 {
@@ -857,22 +723,21 @@ Obtiene la lista completa de miembros de un grupo específico, incluyendo ID, us
   "message": "Group members retrieved successfully.",
   "data": [
     {
-      "id": "880e8400-e29b-41d4-a716-446655440003",
-      "userName": "jperez",
-      "completeName": "Juan Carlos Pérez"
+      "Id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "UserName": "jperez",
+      "CompleteName": "Juan Pérez García"
     },
     {
-      "id": "990e8400-e29b-41d4-a716-446655440004",
-      "userName": "mgonzalez",
-      "completeName": "María González López"
+      "Id": "d4e5f6a7-b8c9-0123-def1-234567890123",
+      "UserName": "mlopez",
+      "CompleteName": "María López"
     }
   ]
 }
 ```
 
 ##### 403 - EGRFB403
-
-**Cuándo ocurre:** El usuario no tiene el permiso 'canRead_Groups' en sus claims JWT
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canRead_Groups'
 
 ```json
 {
@@ -884,8 +749,7 @@ Obtiene la lista completa de miembros de un grupo específico, incluyendo ID, us
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El groupId no existe en la base de datos
+**Cuándo ocurre:** Cuando el groupId no existe
 
 ```json
 {
@@ -897,8 +761,7 @@ Obtiene la lista completa de miembros de un grupo específico, incluyendo ID, us
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado
+**Cuándo ocurre:** Error inesperado no catalogado
 
 ```json
 {
@@ -910,88 +773,66 @@ Obtiene la lista completa de miembros de un grupo específico, incluyendo ID, us
 ```
 
 #### Lógica de Negocio
-
-- Devuelve solo usuarios que están en la tabla group_members para el groupId especificado
-- NO valida si el grupo está activo o inactivo, solo si existe
-- Usa Dapper con query SQL directa
-- completeName se calcula con CONCAT_WS(FirstName, MiddleName, LastName)
+- Primero valida que el grupo existe (con EF Core)
+- Luego obtiene los miembros con SQL raw (Dapper)
+- Si el grupo existe pero no tiene miembros, retorna array vacío con 200
+- No filtra por status del grupo ni de los usuarios
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.GetMembersAsync
 - **Servicios:** IAuthContextService.HasPermission
-- **Helpers:** Dapper
-- **Entidades:** Group, User, GroupMembers
-- **Claims:** permission: canRead_Groups
+- **Helpers:** Dapper para SQL raw, EF Core para validación de existencia
+- **Entidades:** Group (tabla: group), User (tabla: user), GroupMembers (tabla: group_members)
+- **Claims JWT:** permission
 
 #### Notas para Frontend
-
-- Útil para componentes que solo necesitan lista de miembros sin información completa del grupo
-- Más ligero que GetGroupById si solo necesitas miembros
-- Puede devolver array vacío si el grupo no tiene miembros, manejar UI apropiadamente
-- `id` es el userId del miembro (útil para operaciones posteriores como remover)
-- `userName` y `completeName` listos para mostrar en listas/tablas
-- Después de agregar/remover miembros, llamar este endpoint para refrescar lista
+- Perfecto para listar miembros en una tabla/lista
+- Si data está vacío, el grupo existe pero no tiene miembros
+- Id es el id del usuario, NO el id del registro group_members
+- UserName y CompleteName son útiles para mostrar en UI
+- Considerar refrescar después de AddMember o RemoveMember
 
 ---
 
-### 7. DELETE - Remover un miembro de un grupo
+### 7. DELETE - Eliminar un miembro de un grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}/members`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}/members`  
+**Endpoint Interno:** `DELETE /api/Group/RemoveMember`
 
-**Internal Endpoint:** `api/Group/RemoveMember`
+Permite al owner de un grupo eliminar un miembro. El grupo debe estar activo.
 
-**Archivo fuente:** `Controllers/GroupController.cs:218`
-
-#### Descripción
-
-Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (owner/creador) del grupo puede remover miembros. El grupo debe estar activo (Status = Active).
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canUpdate_Groups`
-- **Reglas de ownership:** Solo el owner del grupo (CreatedByUserId) puede remover miembros. El requesterId debe coincidir con group.CreatedByUserId
+- **Reglas de ownership:**
+  - Solo el owner del grupo puede eliminar miembros
+  - Si requesterId != owner, retorna 403
+  - SuperAdmin NO tiene privilegios especiales
 
 #### Request
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
-- `Content-Type` (requerido): `application/json`
+- `Authorization` (requerido): Bearer token con JWT válido
 
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
-
-**Body Schema:**
-
+**Body:**
 ```json
 {
-  "groupId": "uuid (requerido)",
-  "userId": "uuid (requerido)"
+  "GroupId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "memberId": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 }
 ```
 
-**Body Example:**
+**Campos requeridos:** GroupId, memberId
 
-```json
-{
-  "groupId": "550e8400-e29b-41d4-a716-446655440000",
-  "userId": "660e8400-e29b-41d4-a716-446655440001"
-}
-```
-
-#### Validaciones
-
-- El grupo debe existir y estar activo (Status = Active)
-- El miembro debe existir en la tabla group_members para ese grupo
-- El requesterId debe ser el owner del grupo
+**Validaciones:**
+- El grupo debe existir y estar activo (Status.Active)
+- El requesterId (del JWT) debe ser el owner del grupo
+- El memberId debe existir en la tabla group_members para ese grupo
 
 #### Responses
 
 ##### 200 - SGRMB200
-
-**Cuándo ocurre:** El miembro se removió exitosamente del grupo
+**Cuándo ocurre:** Cuando el miembro se elimina exitosamente
 
 ```json
 {
@@ -1003,8 +844,7 @@ Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (own
 ```
 
 ##### 401 - EGRAU401
-
-**Cuándo ocurre:** El userId no pudo extraerse del JWT
+**Cuándo ocurre:** Cuando no se puede obtener el userId del JWT
 
 ```json
 {
@@ -1015,9 +855,20 @@ Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (own
 }
 ```
 
-##### 403 - EGRFB403
+##### 403 - EGRFB403 (Sin permiso)
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canUpdate_Groups'
 
-**Cuándo ocurre:** El usuario no tiene el permiso 'canUpdate_Groups' O no es el owner del grupo
+```json
+{
+  "statusCode": 403,
+  "intOpCode": "EGRFB403",
+  "message": "You do not have permission to perform this action.",
+  "data": []
+}
+```
+
+##### 403 - EGRFB403 (No es owner)
+**Cuándo ocurre:** Cuando el requesterId no es el owner del grupo
 
 ```json
 {
@@ -1029,8 +880,7 @@ Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (own
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El userId no existe en la tabla group_members para ese groupId (no es miembro del grupo)
+**Cuándo ocurre:** Cuando el memberId no está en la tabla group_members para ese grupo
 
 ```json
 {
@@ -1042,8 +892,7 @@ Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (own
 ```
 
 ##### 409 - EGRCF409
-
-**Cuándo ocurre:** El grupo no existe o está inactivo (Status = Inactive)
+**Cuándo ocurre:** Cuando el grupo no existe o su Status != Active
 
 ```json
 {
@@ -1055,8 +904,7 @@ Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (own
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado
+**Cuándo ocurre:** Error inesperado no catalogado
 
 ```json
 {
@@ -1068,73 +916,61 @@ Elimina un usuario de la lista de miembros de un grupo. Solo el propietario (own
 ```
 
 #### Lógica de Negocio
-
-- Solo el owner del grupo puede remover miembros
-- El grupo debe estar en estado Active
-- Usa ExecuteDeleteAsync de Entity Framework (eliminación física, no lógica)
+- Solo el owner del grupo puede eliminar miembros
+- El grupo debe estar activo
+- Se usa ExecuteDeleteAsync de EF Core para eliminar directamente en DB
 - Si affectedRows es 0, significa que el miembro no existía en el grupo
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.RemoveMemberAsync
 - **Servicios:** IAuthContextService.HasPermission, IAuthContextService.GetUserId
-- **Entidades:** Group, GroupMembers
-- **Claims:** NameIdentifier (userId), permission: canUpdate_Groups
+- **Entidades:** Group (tabla: group), GroupMembers (tabla: group_members)
+- **Claims JWT:** NameIdentifier, permission
 
 #### Notas para Frontend
-
-- Ideal para botones de 'Remover' o 'Eliminar miembro' en listas de miembros
-- Solo habilitar UI si el usuario actual es el owner del grupo
-- Después de remover, refrescar lista de miembros
-- Considerar confirmación antes de remover (modal de confirmación)
-- Manejar error 404 si el miembro ya no está en el grupo (puede ocurrir con concurrencia)
-- Manejar error 409 si el grupo está inactivo
+- Solo mostrar opción de eliminar si el usuario actual es el owner
+- Después de eliminar exitosamente, refrescar lista de miembros
+- Mostrar confirmación antes de eliminar
+- Deshabilitar si el grupo está inactivo
+- El error 404 específicamente indica que el miembro no está en el grupo (no que el usuario no existe)
 
 ---
 
 ### 8. PATCH - Desactivar un grupo
 
-**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}/deactivate`
+**Gateway Endpoint:** `https://mi-gateway.onrender.com/groups/{groupId}/deactivate`  
+**Endpoint Interno:** `PATCH /api/Group/{groupId}/deactivate`
 
-**Internal Endpoint:** `api/Group/{groupId}/deactivate`
+Cambia el estado de un grupo a Inactive. Solo el owner o el SuperAdmin pueden desactivar un grupo.
 
-**Archivo fuente:** `Controllers/GroupController.cs:242`
-
-#### Descripción
-
-Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/creador) del grupo o el SuperAdmin pueden desactivarlo. El grupo debe estar activo para poder desactivarse.
-
-#### Autenticación y Autorización
-
-- **Requiere autenticación:** Sí
-- **Tipo:** Bearer Token JWT
+#### Autenticación y Permisos
+- **Requiere autenticación:** ✓ (Bearer JWT)
 - **Permisos requeridos:** `canDelete_Groups`
-- **Reglas de ownership:** Solo el owner del grupo (CreatedByUserId) O el SuperAdmin (00000000-0000-0000-0000-000000000001) pueden desactivarlo. El userId del JWT debe coincidir con group.CreatedByUserId O ser SuperAdminId
+- **Reglas de ownership:**
+  - El owner del grupo puede desactivarlo
+  - **EXCEPCIÓN:** El SuperAdmin (`00000000-0000-0000-0000-000000000001`) TAMBIÉN puede desactivar cualquier grupo
+  - Si requesterId no es owner NI SuperAdmin, retorna 403
 
 #### Request
 
-**Route Params:**
-- `groupId` (uuid, requerido): ID del grupo a desactivar
+**Parámetros de ruta:**
+- `groupId` (requerido, UUID): ID del grupo a desactivar
+  - Ejemplo: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
 
 **Headers:**
-- `Authorization` (requerido): Bearer token JWT
+- `Authorization` (requerido): Bearer token con JWT válido
 
-**Cookies opcionales:**
-- `jwt`: Token JWT alternativo
+**Sin body**
 
-**Body:** No requiere body
-
-#### Validaciones
-
+**Validaciones:**
 - El grupo debe existir
-- El grupo debe estar activo (Status = Active)
-- El userId debe ser el owner del grupo O ser el SuperAdmin
+- El grupo NO debe estar ya inactivo (Status.Inactive)
+- El requesterId debe ser owner O SuperAdmin
 
 #### Responses
 
 ##### 200 - SGRDL200
-
-**Cuándo ocurre:** El grupo se desactivó exitosamente
+**Cuándo ocurre:** Cuando el grupo se desactiva exitosamente
 
 ```json
 {
@@ -1146,8 +982,7 @@ Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/cr
 ```
 
 ##### 401 - EGRAU401
-
-**Cuándo ocurre:** El userId no pudo extraerse del JWT
+**Cuándo ocurre:** Cuando no se puede obtener el userId del JWT
 
 ```json
 {
@@ -1158,9 +993,20 @@ Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/cr
 }
 ```
 
-##### 403 - EGRFB403
+##### 403 - EGRFB403 (Sin permiso)
+**Cuándo ocurre:** Cuando el usuario no tiene el permiso 'canDelete_Groups'
 
-**Cuándo ocurre:** El usuario no tiene el permiso 'canDelete_Groups' O no es el owner del grupo ni el SuperAdmin
+```json
+{
+  "statusCode": 403,
+  "intOpCode": "EGRFB403",
+  "message": "You do not have permission to perform this action.",
+  "data": []
+}
+```
+
+##### 403 - EGRFB403 (No es owner ni SuperAdmin)
+**Cuándo ocurre:** Cuando el requesterId no es owner ni SuperAdmin
 
 ```json
 {
@@ -1172,8 +1018,7 @@ Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/cr
 ```
 
 ##### 404 - EGRNF404
-
-**Cuándo ocurre:** El groupId no existe en la base de datos
+**Cuándo ocurre:** Cuando el groupId no existe
 
 ```json
 {
@@ -1185,8 +1030,7 @@ Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/cr
 ```
 
 ##### 409 - EGRCF409
-
-**Cuándo ocurre:** El grupo ya tiene Status = Inactive
+**Cuándo ocurre:** Cuando el grupo ya tiene Status.Inactive
 
 ```json
 {
@@ -1198,8 +1042,7 @@ Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/cr
 ```
 
 ##### 500 - EGRIN500
-
-**Cuándo ocurre:** Cualquier otro error no contemplado
+**Cuándo ocurre:** Error inesperado no catalogado
 
 ```json
 {
@@ -1211,156 +1054,129 @@ Cambia el estado de un grupo de Active a Inactive. Solo el propietario (owner/cr
 ```
 
 #### Lógica de Negocio
-
-- Solo el owner del grupo O el SuperAdmin pueden desactivarlo
-- SuperAdmin tiene bypass de ownership (no necesita ser owner)
-- No se puede desactivar un grupo ya inactivo
-- Es una desactivación lógica (Status = Inactive), no física
-- Los miembros del grupo NO se eliminan al desactivar
+- La desactivación es un soft delete (cambia Status a Inactive)
+- El owner SIEMPRE puede desactivar su grupo
+- El SuperAdmin (`00000000-0000-0000-0000-000000000001`) puede desactivar CUALQUIER grupo
+- No se puede desactivar un grupo ya inactivo (validación de idempotencia)
+- Único endpoint donde SuperAdmin tiene privilegios especiales
 
 #### Dependencias
-
 - **Repositorios:** IGroupRepositorie.DeactivateGroupAsync
 - **Servicios:** IAuthContextService.HasPermission, IAuthContextService.GetUserId
-- **Entidades:** Group
-- **Claims:** NameIdentifier (userId), permission: canDelete_Groups
+- **Entidades:** Group (tabla: group)
+- **Claims JWT:** NameIdentifier, permission
 
 #### Notas para Frontend
-
-- Usar en botones de 'Desactivar' o 'Archivar' grupo
-- Solo habilitar UI si el usuario actual es el owner O es SuperAdmin
-- Considerar confirmación antes de desactivar (modal de confirmación)
-- Después de desactivar, redirigir a lista de grupos o actualizar vista
-- Manejar error 409 si el grupo ya está inactivo (puede ocurrir con concurrencia)
-- El SuperAdmin puede desactivar cualquier grupo (validar en frontend si el usuario es SuperAdmin)
-- Los miembros del grupo NO se eliminan, solo cambia el status
+- Mostrar opción de desactivar solo si el usuario es owner O SuperAdmin
+- Considerar mostrar confirmación antes de desactivar (es una acción importante)
+- Después de desactivar, actualizar vista (el grupo no debería ser editable)
+- Deshabilitar botón si el grupo ya está inactivo
+- NO es eliminación física, el grupo sigue existiendo en la DB
 
 ---
 
 ## Inconsistencias Detectadas
 
-### ⚠️ Severidad: MEDIA
+### 1. Gateway endpoint conflict (Severidad: Baja)
+**Endpoint:** AddGroup / GetGroups
 
-**Endpoint:** add-group
+**Problema:** El comentario indica que ambos endpoints corresponden a `https://mi-gateway.onrender.com/groups/`, uno con POST y otro con GET. Esto es correcto si el API Gateway enruta por método HTTP.
 
-**Problema:** El repositorio devuelve `Result<Guid>` con el groupId creado, pero el controller no incluye este ID en la respuesta 201. El frontend no puede conocer el ID del grupo recién creado sin hacer otra consulta.
-
-**Recomendación:** Considerar incluir el groupId en el campo 'data' de la respuesta 201.
-
----
-
-### ⚠️ Severidad: ALTA
-
-**Endpoint:** edit-group
-
-**Problema:** No se valida unicidad del nombre al editar un grupo (solo se valida al crear). Esto podría permitir nombres duplicados.
-
-**Recomendación:** Agregar validación de unicidad de nombre en EditGroupAsync similar a AddGroupAsync.
+**Resolución:** Confirmar que el API Gateway enruta correctamente POST /groups/ a AddGroup y GET /groups/ a GetGroups.
 
 ---
 
-### ℹ️ Severidad: BAJA
+### 2. Gateway endpoint suggests route param but body is used (Severidad: Media)
+**Endpoint:** RemoveMember
 
-**Endpoint:** get-group-by-id
+**Problema:** El comentario indica `https://mi-gateway.onrender.com/groups/{groupId}/members` sugiriendo que groupId podría ser route parameter, pero el endpoint interno usa DELETE sin route params, enviando GroupId y memberId en el body. Esto es inusual para REST APIs donde DELETE típicamente usa route params.
 
-**Problema:** Inconsistencia en naming conventions: `GetCompleteGroupDto` usa PascalCase (Id, Name, Description) mientras `GroupDto` usa camelCase (id, name, description).
-
-**Recomendación:** Estandarizar las propiedades de los DTOs a una sola convención (preferiblemente camelCase para JSON).
-
----
-
-### ⚠️ Severidad: MEDIA
-
-**Endpoint:** remove-member
-
-**Problema:** El endpoint usa método HTTP DELETE pero espera body con JSON. Algunos proxies/gateways HTTP pueden rechazar DELETE con body. RESTful típico usaría DELETE a `/groups/{groupId}/members/{userId}` sin body.
-
-**Recomendación:** Considerar cambiar a route params: `DELETE /groups/{groupId}/members/{userId}`
+**Resolución:** Considerar cambiar a `DELETE /api/Group/{groupId}/members/{memberId}` o aclarar en documentación del gateway.
 
 ---
 
-### ℹ️ Severidad: BAJA
+### 3. No validation for unique name on edit (Severidad: Media)
+**Endpoint:** EditGroup
 
-**Endpoints:** múltiples (GetGroups, GetGroupById, GetGroupMembers)
+**Problema:** El endpoint AddGroup valida que el nombre sea único, pero EditGroup no tiene validación explícita de unicidad al cambiar el nombre. Esto podría permitir duplicados.
 
-**Problema:** El mismo intOpCode 'SGRRD200' se usa para diferentes operaciones (GetGroups, GetGroupById, GetGroupMembers). Dificulta el tracking específico de operaciones en frontend.
-
-**Recomendación:** Usar intOpCodes únicos por endpoint (ej: SGRGT200 para GetGroups, SGRGD200 para GetGroupById, SGRGM200 para GetGroupMembers).
-
----
-
-### ℹ️ Severidad: BAJA
-
-**Endpoints:** add-member, edit-group
-
-**Problema:** Los comentarios 'Corresponde a:' para AddMember y EditGroup apuntan a la misma URL del gateway pero con métodos HTTP diferentes. El comentario de AddMember debería especificar el método POST.
-
-**Recomendación:** Clarificar en comentarios cuando múltiples endpoints internos mapean a la misma ruta del gateway con diferentes métodos HTTP.
+**Resolución:** Agregar validación de unicidad en EditGroupAsync o documentar que es intencional.
 
 ---
 
-### ℹ️ Severidad: INFO
+### 4. Functional duplication (Severidad: Baja)
+**Endpoints:** GetGroupById vs GetGroupMembers
 
-**Endpoints:** múltiples
+**Problema:** GetGroupById retorna el grupo completo incluyendo miembros, mientras que GetGroupMembers retorna solo los miembros. Hay duplicación funcional.
 
-**Problema:** El campo 'data' siempre es un array, incluso cuando solo se devuelve un elemento (GetGroupById). Esto puede ser confuso para consumers de la API.
-
-**Recomendación:** Considerar usar 'data' como objeto o array según el contexto, o documentar claramente esta convención.
-
----
-
-### ℹ️ Severidad: INFO
-
-**Endpoints:** get-groups, get-group-by-id, get-group-members
-
-**Problema:** Los endpoints de lectura no filtran por status del grupo. Esto significa que devuelven grupos tanto activos como inactivos. Puede ser intencional, pero debería estar documentado explícitamente en la API.
-
-**Recomendación:** Considerar agregar query param opcional '?status=active' o documentar claramente que devuelve todos los status.
+**Resolución:** Documentado como diferente nivel de detalle. GetGroupMembers es más liviano.
 
 ---
 
-## Apéndice: Estructura de StandardResponse
+### 5. Error message inaccuracy (Severidad: Baja)
+**Endpoint:** DeactivateGroup
 
-Todos los endpoints de este servicio devuelven la siguiente estructura estándar:
+**Problema:** El mensaje 'Only the group owner can deactivate the group.' es técnicamente inexacto porque el SuperAdmin también puede desactivar cualquier grupo.
 
-```csharp
-public class StandardResponse<T>
+**Resolución:** Cambiar mensaje a 'Only the group owner or SuperAdmin can deactivate the group.'
+
+---
+
+### 6. Inconsistent intOpCode usage (Severidad: Info)
+**Endpoints:** Todos
+
+**Problema:** El intOpCode parece usar el patrón `{S/E}{GR}{operación}{statusCode}` donde S=Success, E=Error, GR=Groups. Sin embargo, la consistencia no está documentada formalmente.
+
+**Resolución:** Documentar el patrón de intOpCode para que frontend pueda usarlo consistentemente.
+
+---
+
+### 7. Inconsistent intOpCode for different operations (Severidad: Baja)
+**Endpoints:** AddMember, RemoveMember
+
+**Problema:** AddMember y RemoveMember usan el mismo intOpCode 'SGRMB200' para éxito, cuando representan operaciones opuestas.
+
+**Resolución:** Considerar usar códigos diferentes como SGRMBA200 (add) y SGRMBR200 (remove).
+
+---
+
+## Información Técnica Adicional
+
+### Formato de Response Estándar
+Todos los endpoints usan el mismo formato de respuesta:
+
+```json
 {
-    public int StatusCode { get; set; }
-    public string IntOpCode { get; set; }
-    public string Message { get; set; }
-    public T[] Data { get; set; } = Array.Empty<T>();
+  "statusCode": 200,
+  "intOpCode": "CODIGO_OPERACION",
+  "message": "Mensaje descriptivo",
+  "data": []
 }
 ```
 
-**Notas importantes:**
-- `StatusCode`: Código HTTP estándar (200, 201, 400, 401, 403, 404, 409, 500)
-- `IntOpCode`: Código interno de operación para tracking específico (formato: `EGRSSS###` donde SSS es identificador y ### es status code)
-- `Message`: Mensaje descriptivo en inglés
-- `Data`: Siempre es un array, incluso si está vacío o contiene un solo elemento
+- `statusCode`: Código HTTP estándar
+- `intOpCode`: Código interno de operación para identificación específica
+- `message`: Mensaje descriptivo del resultado
+- `data`: SIEMPRE es un array, incluso si está vacío
 
----
+### Autenticación
+- Se soporta Bearer token en header Authorization
+- Alternativamente se puede enviar cookie 'jwt'
+- El token debe ser un JWT válido firmado con la clave del servicio
+- Claims requeridos:
+  - `NameIdentifier`: Para identificar al usuario
+  - `permission`: Para validar permisos (puede haber múltiples claims de este tipo)
 
-## Resumen de IntOpCodes
+### Base de Datos
+- PostgreSQL con naming convention snake_case
+- Tablas principales:
+  - `group`: Grupos del sistema
+  - `user`: Usuarios del sistema
+  - `group_members`: Relación muchos a muchos entre grupos y usuarios
 
-| IntOpCode | Descripción | Status Code |
-|-----------|-------------|-------------|
-| SGRCR201 | Group created successfully | 201 |
-| SGRMB200 | Group member added/removed successfully | 200 |
-| SGRRD200 | Groups/Group/Members retrieved successfully | 200 |
-| SGRUP200 | Group updated successfully | 200 |
-| SGRDL200 | Group deactivated successfully | 200 |
-| EGRAU401 | Unauthorized - Invalid/missing auth | 401 |
-| EGRFB403 | Forbidden - No permission | 403 |
-| EGRNF404 | Not Found | 404 |
-| EGRCF409 | Conflict | 409 |
-| EGRBR400 | Bad Request | 400 |
-| EGRIN500 | Internal Server Error | 500 |
-
----
-
-**Documentación generada a partir del código fuente del proyecto Groups Microservice**
-
-**Fecha:** 2026-04-06
-
-**Versión del servicio:** Inferida del código actual
+### Tecnologías
+- ASP.NET Core
+- Entity Framework Core (con snake_case naming convention)
+- Dapper (para consultas SQL raw optimizadas)
+- AutoMapper (para mapeo de DTOs)
+- JWT Bearer Authentication
