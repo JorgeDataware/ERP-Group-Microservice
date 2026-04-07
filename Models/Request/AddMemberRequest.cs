@@ -3,5 +3,5 @@
 public record AddMemberRequest
 (
     Guid GroupId,
-    Guid UserId
+    Guid memberId
 );

@@ -111,7 +111,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
         if (!_authContextService.HasPermission(GroupPermissions.CanUpdate))
             return ForbiddenResponse();
 
-        var result = await _groupRepositorie.AddMemberAsync(request.GroupId, request.UserId, requesterId);
+        var result = await _groupRepositorie.AddMemberAsync(request.GroupId, request.memberId, requesterId);
         if (!result.IsSuccess)
         {
             return result.error.Code switch
