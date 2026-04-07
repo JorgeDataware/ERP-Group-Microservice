@@ -3,5 +3,5 @@
 public record RemoveMemberRequest
 (
     Guid GroupId,
-    Guid UserId
+    Guid memberId
 );

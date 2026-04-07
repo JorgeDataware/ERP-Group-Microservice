@@ -224,7 +224,7 @@ public class GroupController(IGroupRepositorie groupRepositorie, IAuthContextSer
             return ForbiddenResponse();
         if (_authContextService.GetUserId() is not Guid requesterId)
             return UnauthorizedResponse();
-        var result = await _groupRepositorie.RemoveMemberAsync(request.GroupId, request.UserId, requesterId);
+        var result = await _groupRepositorie.RemoveMemberAsync(request.GroupId, request.memberId, requesterId);
         if (!result.IsSuccess)
         {
             return result.error.Code switch
